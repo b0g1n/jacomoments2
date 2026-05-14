@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
 
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 // Visit this URL in browser to create database tables: https://jacomoments.vercel.app/api/init-db
 export async function GET() {
   try {

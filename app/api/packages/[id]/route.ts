@@ -10,17 +10,21 @@ export async function PUT(
 ) {
   try {
     const { id } = await params
-    const { name, price, duration, features, isPopular } = await req.json()
+    const { name, category, categoryTitle, price, duration, features, isPopular, order } = await req.json()
+
+    const updateData: any = {}
+    if (name !== undefined) updateData.name = name
+    if (category !== undefined) updateData.category = category
+    if (categoryTitle !== undefined) updateData.categoryTitle = categoryTitle
+    if (price !== undefined) updateData.price = Number(price)
+    if (duration !== undefined) updateData.duration = duration
+    if (features !== undefined) updateData.features = JSON.stringify(features)
+    if (isPopular !== undefined) updateData.isPopular = isPopular
+    if (order !== undefined) updateData.order = Number(order)
 
     const updated = await prisma.package.update({
       where: { id },
-      data: {
-        name,
-        price: Number(price),
-        duration,
-        features: JSON.stringify(features),
-        isPopular,
-      },
+      data: updateData,
     })
 
     return NextResponse.json({ ...updated, features: JSON.parse(updated.features) })

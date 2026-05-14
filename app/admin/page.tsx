@@ -99,6 +99,10 @@ export default function AdminPage() {
   const [successMessage, setSuccessMessage] = useState('')
 
   const [editingPhoto, setEditingPhoto] = useState<Photo | null>(null)
+
+  const closePhotoModal = () => {
+    setEditingPhoto(null)
+  }
   const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set())
 
   // Upload states
@@ -245,10 +249,13 @@ export default function AdminPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: pkg.name,
+          category: pkg.category,
+          categoryTitle: pkg.categoryTitle,
           price: pkg.price,
           duration: pkg.duration,
           features: pkg.features,
           isPopular: pkg.isPopular,
+          order: pkg.order,
         }),
       })
       if (res.ok) {
@@ -364,11 +371,13 @@ export default function AdminPage() {
             successCount++
           } else {
             errorCount++
-            console.error('Upload failed for file:', file.name, data.error)
+            console.error('Upload failed for file:', file.name, data.error || data.details)
+            setErrorMessage(`Eroare la ${file.name}: ${data.details || data.error || 'Eroare necunoscută'}`)
           }
         } catch (err) {
           errorCount++
           console.error('Upload error for file:', file.name, err)
+          setErrorMessage(`Eroare la ${file.name}: ${err instanceof Error ? err.message : 'Eroare de rețea'}`)
         }
       }
 
@@ -413,11 +422,15 @@ export default function AdminPage() {
 
       if (res.ok) {
         await fetchPhotos()
-        setEditingPhoto(null)
+        closePhotoModal()
         showMessage('Foto actualizată!')
+      } else {
+        const data = await res.json()
+        showMessage(`Eroare: ${data.details || data.error || 'Nu s-a putut actualiza'}`, true)
       }
     } catch (error) {
       console.error('Error updating photo:', error)
+      showMessage('Eroare la actualizare. Încearcă din nou.', true)
     } finally {
       setLoading(false)
     }
@@ -856,7 +869,10 @@ export default function AdminPage() {
                   />
                   <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-center items-center gap-2">
                     <button
-                      onClick={() => setEditingPhoto(photo)}
+                      onClick={() => {
+                        setEditingPhoto(photo)
+                        setUseCustomCategory(!PREDEFINED_CATEGORIES.includes(photo.category))
+                      }}
                       className="bg-white text-black px-3 py-1 rounded text-sm font-bold hover:bg-gray-200 flex items-center gap-1"
                     >
                       <Edit size={16} />
@@ -1166,7 +1182,7 @@ export default function AdminPage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50"
-            onClick={() => setEditingPhoto(null)}
+            onClick={() => closePhotoModal()}
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
@@ -1178,7 +1194,7 @@ export default function AdminPage() {
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold text-black">Editează Poza</h2>
                 <button
-                  onClick={() => setEditingPhoto(null)}
+                  onClick={() => closePhotoModal()}
                   className="p-2 hover:bg-gray-100 rounded text-black"
                 >
                   <X size={24} />
@@ -1218,25 +1234,45 @@ export default function AdminPage() {
 
                 <div>
                   <label className="block text-sm font-bold mb-1 text-black">Categorie</label>
-                  <select
-                    value={editingPhoto.category}
-                    onChange={(e) =>
-                      setEditingPhoto({ ...editingPhoto, category: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-black mb-2"
-                  >
-                    {PREDEFINED_CATEGORIES.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                  <input
-                    type="text"
-                    placeholder="Sau scrie categoria custom..."
-                    onChange={(e) =>
-                      setEditingPhoto({ ...editingPhoto, category: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-black"
-                  />
+                  <div className="flex gap-2 mb-2">
+                    <button
+                      type="button"
+                      onClick={() => setUseCustomCategory(false)}
+                      className={`flex-1 px-3 py-2 rounded font-medium ${!useCustomCategory ? 'bg-black text-white' : 'bg-gray-200 text-black'}`}
+                    >
+                      Predefinită
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUseCustomCategory(true)}
+                      className={`flex-1 px-3 py-2 rounded font-medium ${useCustomCategory ? 'bg-black text-white' : 'bg-gray-200 text-black'}`}
+                    >
+                      Custom
+                    </button>
+                  </div>
+                  {!useCustomCategory ? (
+                    <select
+                      value={editingPhoto.category}
+                      onChange={(e) =>
+                        setEditingPhoto({ ...editingPhoto, category: e.target.value })
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-black"
+                    >
+                      {PREDEFINED_CATEGORIES.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      placeholder="Scrie categoria custom..."
+                      value={editingPhoto.category}
+                      onChange={(e) =>
+                        setEditingPhoto({ ...editingPhoto, category: e.target.value })
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-black"
+                    />
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -1256,7 +1292,7 @@ export default function AdminPage() {
 
                 <div className="flex justify-end gap-3 pt-4">
                   <button
-                    onClick={() => setEditingPhoto(null)}
+                    onClick={() => closePhotoModal()}
                     className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 text-black font-medium"
                   >
                     Anulează
