@@ -88,16 +88,26 @@ export default function AdminPage() {
     categoryTitle: '',
     price: 0,
     duration: '',
-    features: [''],
+    features: [],
     isPopular: false,
     order: 0,
   })
   const [loading, setLoading] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
   const [editingPhoto, setEditingPhoto] = useState<Photo | null>(null)
   const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set())
+
+  // Upload states
+  const [singleUploadFile, setSingleUploadFile] = useState<FileList | null>(null)
   const [bulkUploadFiles, setBulkUploadFiles] = useState<FileList | null>(null)
-  const [customCategory, setCustomCategory] = useState('')
   const [uploadCategory, setUploadCategory] = useState('nunta')
+  const [bulkUploadCategory, setBulkUploadCategory] = useState('nunta')
+  const [useCustomCategory, setUseCustomCategory] = useState(false)
+  const [customCategory, setCustomCategory] = useState('')
+  const [useBulkCustomCategory, setUseBulkCustomCategory] = useState(false)
+  const [bulkCustomCategory, setBulkCustomCategory] = useState('')
+
   const [showPasswordModal, setShowPasswordModal] = useState(false)
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
@@ -168,15 +178,49 @@ export default function AdminPage() {
     }
   }, [isAuthenticated])
 
+  // Show message helper
+  const showMessage = (msg: string, isError = false) => {
+    if (isError) {
+      setErrorMessage(msg)
+      setTimeout(() => setErrorMessage(''), 5000)
+    } else {
+      setSuccessMessage(msg)
+      setTimeout(() => setSuccessMessage(''), 3000)
+    }
+  }
+
   // Create new package
   const handleCreatePackage = async () => {
+    if (!newPackage.name || !newPackage.category) {
+      showMessage('Te rog completează numele pachetului și categoria!', true)
+      return
+    }
+
     setLoading(true)
+    setErrorMessage('')
+
     try {
+      const payload = {
+        name: newPackage.name,
+        category: newPackage.category,
+        categoryTitle: newPackage.categoryTitle || newPackage.category,
+        price: Number(newPackage.price) || 0,
+        duration: newPackage.duration || '',
+        features: Array.isArray(newPackage.features) ? newPackage.features : [],
+        isPopular: Boolean(newPackage.isPopular),
+        order: Number(newPackage.order) || 0,
+      }
+
+      console.log('Creating package with payload:', payload)
+
       const res = await fetch('/api/packages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newPackage),
+        body: JSON.stringify(payload),
       })
+
+      const data = await res.json()
+
       if (res.ok) {
         await fetchPackages()
         setNewPackage({
@@ -185,13 +229,18 @@ export default function AdminPage() {
           categoryTitle: '',
           price: 0,
           duration: '',
-          features: [''],
+          features: [],
           isPopular: false,
           order: 0,
         })
+        showMessage('Pachet adăugat cu succes!')
+      } else {
+        console.error('Error response:', data)
+        showMessage(data.error || 'Eroare la adăugarea pachetului', true)
       }
     } catch (error) {
       console.error('Error creating package:', error)
+      showMessage('Eroare la adăugarea pachetului', true)
     } finally {
       setLoading(false)
     }
@@ -215,9 +264,13 @@ export default function AdminPage() {
       if (res.ok) {
         await fetchPackages()
         setEditingPackage(null)
+        showMessage('Pachet actualizat!')
+      } else {
+        showMessage('Eroare la actualizare', true)
       }
     } catch (error) {
       console.error('Error updating package:', error)
+      showMessage('Eroare la actualizare', true)
     } finally {
       setLoading(false)
     }
@@ -230,8 +283,10 @@ export default function AdminPage() {
     try {
       await fetch(`/api/packages/${id}`, { method: 'DELETE' })
       await fetchPackages()
+      showMessage('Pachet șters!')
     } catch (error) {
       console.error('Error deleting package:', error)
+      showMessage('Eroare la ștergere', true)
     } finally {
       setLoading(false)
     }
@@ -249,6 +304,7 @@ export default function AdminPage() {
       if (res.ok) {
         await fetchPricingContent()
         setEditingContent(null)
+        showMessage('Conținut actualizat!')
       }
     } catch (error) {
       console.error('Error updating pricing content:', error)
@@ -285,8 +341,14 @@ export default function AdminPage() {
   }
 
   // Photo upload handler
-  const handleUpload = async (files: FileList, category: string = 'nunta') => {
+  const handleUpload = async (files: FileList, category: string) => {
+    if (files.length === 0) {
+      showMessage('Selectează cel puțin un fișier!', true)
+      return
+    }
+
     setLoading(true)
+    setErrorMessage('')
 
     try {
       const uploadPromises = Array.from(files).map(async (file) => {
@@ -305,6 +367,7 @@ export default function AdminPage() {
       const uploads = await Promise.all(uploadPromises)
 
       // Create photo entries in database
+      let successCount = 0
       for (const upload of uploads) {
         if (upload.success) {
           await fetch('/api/photos', {
@@ -317,13 +380,22 @@ export default function AdminPage() {
               tags: [],
             }),
           })
+          successCount++
         }
       }
 
       await fetchPhotos()
+      setSingleUploadFile(null)
       setBulkUploadFiles(null)
+
+      if (successCount === uploads.length) {
+        showMessage(`${successCount} poze încărcate cu succes!`)
+      } else {
+        showMessage(`${successCount}/${uploads.length} poze încărcate`, true)
+      }
     } catch (error) {
       console.error('Error uploading photos:', error)
+      showMessage('Eroare la încărcare', true)
     } finally {
       setLoading(false)
     }
@@ -350,6 +422,7 @@ export default function AdminPage() {
       if (res.ok) {
         await fetchPhotos()
         setEditingPhoto(null)
+        showMessage('Foto actualizată!')
       }
     } catch (error) {
       console.error('Error updating photo:', error)
@@ -367,6 +440,7 @@ export default function AdminPage() {
     try {
       await fetch(`/api/photos/${id}`, { method: 'DELETE' })
       await fetchPhotos()
+      showMessage('Foto ștearsă!')
     } catch (error) {
       console.error('Error deleting photo:', error)
     } finally {
@@ -389,6 +463,7 @@ export default function AdminPage() {
       )
       setSelectedPhotos(new Set())
       await fetchPhotos()
+      showMessage('Poze șterse!')
     } catch (error) {
       console.error('Error bulk deleting photos:', error)
     } finally {
@@ -419,6 +494,7 @@ export default function AdminPage() {
     try {
       await fetch(`/api/messages/${id}`, { method: 'DELETE' })
       await fetchMessages()
+      showMessage('Mesaj șters!')
     } catch (error) {
       console.error('Error deleting message:', error)
     } finally {
@@ -432,13 +508,11 @@ export default function AdminPage() {
     setPasswordError('')
     setPasswordSuccess('')
 
-    // Validate passwords match
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
       setPasswordError('New passwords do not match')
       return
     }
 
-    // Validate new password length
     if (passwordForm.newPassword.length < 6) {
       setPasswordError('New password must be at least 6 characters')
       return
@@ -489,6 +563,15 @@ export default function AdminPage() {
       extrasItems: 'Lista Extra Opționale (separate prin virgulă)',
     }
     return labels[key] || key
+  }
+
+  // Get actual category to use for upload
+  const getUploadCategory = () => {
+    return useCustomCategory && customCategory ? customCategory : uploadCategory
+  }
+
+  const getBulkUploadCategory = () => {
+    return useBulkCustomCategory && bulkCustomCategory ? bulkCustomCategory : bulkUploadCategory
   }
 
   // Login screen
@@ -543,7 +626,7 @@ export default function AdminPage() {
               className="flex items-center gap-2 px-4 py-2 border border-neutral-400 text-black rounded hover:bg-neutral-800 hover:text-white transition-colors"
             >
               <KeyRound size={18} />
-              Change Password
+              Schimbă Parola
             </button>
             <button
               onClick={() => setIsAuthenticated(false)}
@@ -568,7 +651,7 @@ export default function AdminPage() {
             }`}
           >
             <ImageIcon size={18} />
-            Photos
+            Poze
           </button>
           <button
             onClick={() => setActiveTab('messages')}
@@ -579,7 +662,7 @@ export default function AdminPage() {
             }`}
           >
             <MessageSquare size={18} />
-            Messages
+            Mesaje
             {messages.filter((m) => !m.read).length > 0 && (
               <span className="bg-neutral-800 text-white text-xs px-2 py-0.5 rounded-full">
                 {messages.filter((m) => !m.read).length}
@@ -600,65 +683,144 @@ export default function AdminPage() {
         </div>
       </div>
 
+      {/* Success/Error Messages */}
+      {errorMessage && (
+        <div className="bg-red-600 text-white px-6 py-3 text-center font-bold">
+          {errorMessage}
+        </div>
+      )}
+      {successMessage && (
+        <div className="bg-green-600 text-white px-6 py-3 text-center font-bold">
+          {successMessage}
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto p-6">
         {/* Photos Tab */}
         {activeTab === 'photos' && (
           <div>
             {/* Upload Section */}
             <div className="bg-neutral-100 rounded-lg p-6 mb-6">
-              <h2 className="text-xl font-bold text-black mb-4">Upload Photos</h2>
+              <h2 className="text-xl font-bold text-black mb-4">Încarcă Poze</h2>
               <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-bold mb-2 text-black">Single Upload</label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => e.target.files && handleUpload(e.target.files, uploadCategory)}
-                    className="w-full text-black file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-neutral-200 file:text-black hover:file:bg-neutral-300"
-                  />
-                  <div className="mt-3">
-                    <label className="block text-sm font-bold mb-1 text-black">Category:</label>
-                    <select
-                      value={uploadCategory}
-                      onChange={(e) => setUploadCategory(e.target.value)}
-                      className="px-3 py-2 border rounded bg-white text-black mr-2"
-                    >
-                      {PREDEFINED_CATEGORIES.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
+                {/* Single Upload */}
+                <div className="bg-white rounded-lg p-4 border border-neutral-300">
+                  <h3 className="font-bold text-black mb-3">Încărcare Single</h3>
+
+                  <div className="mb-3">
                     <input
-                      type="text"
-                      placeholder="Or type custom category..."
-                      value={customCategory}
-                      onChange={(e) => {
-                        setCustomCategory(e.target.value)
-                        if (e.target.value) setUploadCategory(e.target.value)
-                      }}
-                      className="px-3 py-2 border rounded bg-white text-black"
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setSingleUploadFile(e.target.files)}
+                      className="w-full text-black file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-neutral-200 file:text-black hover:file:bg-neutral-300"
                     />
                   </div>
+
+                  <div className="mb-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="singleCustom"
+                        checked={useCustomCategory}
+                        onChange={(e) => setUseCustomCategory(e.target.checked)}
+                        className="w-4 h-4"
+                      />
+                      <label htmlFor="singleCustom" className="text-sm font-bold text-black">
+                        Categorie custom
+                      </label>
+                    </div>
+
+                    {!useCustomCategory ? (
+                      <select
+                        value={uploadCategory}
+                        onChange={(e) => setUploadCategory(e.target.value)}
+                        className="w-full px-3 py-2 border rounded bg-white text-black"
+                      >
+                        {PREDEFINED_CATEGORIES.map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        placeholder="Introdu categoria custom..."
+                        value={customCategory}
+                        onChange={(e) => setCustomCategory(e.target.value)}
+                        className="w-full px-3 py-2 border rounded bg-white text-black"
+                      />
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => singleUploadFile && handleUpload(singleUploadFile, getUploadCategory())}
+                    disabled={loading || !singleUploadFile}
+                    className="w-full bg-neutral-800 text-white px-4 py-2 rounded font-bold hover:bg-neutral-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    <Upload size={18} />
+                    {loading ? 'Se încarcă...' : 'Încarcă Poza'}
+                  </button>
                 </div>
-                <div>
-                  <label className="block text-sm font-bold mb-2 text-black">Bulk Upload</label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={(e) => setBulkUploadFiles(e.target.files)}
-                    className="w-full text-black file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-neutral-200 file:text-black hover:file:bg-neutral-300"
-                  />
-                  {bulkUploadFiles && bulkUploadFiles.length > 0 && (
-                    <button
-                      onClick={() =>
-                        bulkUploadFiles && handleUpload(bulkUploadFiles, uploadCategory)
-                      }
-                      disabled={loading}
-                      className="mt-2 bg-neutral-800 text-white px-4 py-2 rounded hover:bg-neutral-700 disabled:opacity-50"
-                    >
-                      Upload {bulkUploadFiles.length} photos to "{uploadCategory}"
-                    </button>
-                  )}
+
+                {/* Bulk Upload */}
+                <div className="bg-white rounded-lg p-4 border border-neutral-300">
+                  <h3 className="font-bold text-black mb-3">Încărcare Multiplă</h3>
+
+                  <div className="mb-3">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={(e) => setBulkUploadFiles(e.target.files)}
+                      className="w-full text-black file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-neutral-200 file:text-black hover:file:bg-neutral-300"
+                    />
+                    {bulkUploadFiles && bulkUploadFiles.length > 0 && (
+                      <p className="text-sm text-black mt-1">{bulkUploadFiles.length} fișiere selectate</p>
+                    )}
+                  </div>
+
+                  <div className="mb-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="bulkCustom"
+                        checked={useBulkCustomCategory}
+                        onChange={(e) => setUseBulkCustomCategory(e.target.checked)}
+                        className="w-4 h-4"
+                      />
+                      <label htmlFor="bulkCustom" className="text-sm font-bold text-black">
+                        Categorie custom
+                      </label>
+                    </div>
+
+                    {!useBulkCustomCategory ? (
+                      <select
+                        value={bulkUploadCategory}
+                        onChange={(e) => setBulkUploadCategory(e.target.value)}
+                        className="w-full px-3 py-2 border rounded bg-white text-black"
+                      >
+                        {PREDEFINED_CATEGORIES.map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        placeholder="Introdu categoria custom..."
+                        value={bulkCustomCategory}
+                        onChange={(e) => setBulkCustomCategory(e.target.value)}
+                        className="w-full px-3 py-2 border rounded bg-white text-black"
+                      />
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => bulkUploadFiles && handleUpload(bulkUploadFiles, getBulkUploadCategory())}
+                    disabled={loading || !bulkUploadFiles || bulkUploadFiles.length === 0}
+                    className="w-full bg-neutral-800 text-white px-4 py-2 rounded font-bold hover:bg-neutral-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    <Upload size={18} />
+                    {loading ? 'Se încarcă...' : `Încarcă ${bulkUploadFiles?.length || 0} Poze`}
+                  </button>
                 </div>
               </div>
             </div>
@@ -666,13 +828,13 @@ export default function AdminPage() {
             {/* Bulk Actions */}
             {selectedPhotos.size > 0 && (
               <div className="bg-red-600 text-white rounded-lg p-4 mb-6 flex justify-between items-center">
-                <span>{selectedPhotos.size} photos selected</span>
+                <span>{selectedPhotos.size} poze selectate</span>
                 <button
                   onClick={handleBulkDelete}
                   className="flex items-center gap-2 bg-white text-red-600 px-4 py-2 rounded hover:bg-gray-100"
                 >
                   <Trash2 size={18} />
-                  Delete Selected
+                  Șterge Selectate
                 </button>
               </div>
             )}
@@ -740,7 +902,7 @@ export default function AdminPage() {
         {activeTab === 'messages' && (
           <div className="bg-neutral-100 rounded-lg">
             {messages.length === 0 ? (
-              <p className="text-center py-12 text-black">No messages yet</p>
+              <p className="text-center py-12 text-black">Nu există mesaje</p>
             ) : (
               <div className="divide-y divide-neutral-300">
                 {messages.map((msg) => (
@@ -760,7 +922,7 @@ export default function AdminPage() {
                         <button
                           onClick={() => handleToggleMessageRead(msg.id, msg.read)}
                           className="p-2 hover:bg-neutral-300 rounded text-black"
-                          title={msg.read ? 'Mark as unread' : 'Mark as read'}
+                          title={msg.read ? 'Marchează ca necitit' : 'Marchează ca citit'}
                         >
                           {msg.read ? <EyeOff size={18} /> : <Eye size={18} />}
                         </button>
@@ -846,20 +1008,21 @@ export default function AdminPage() {
                 <h3 className="font-bold text-black mb-3">Adaugă Pachet Nou</h3>
                 <div className="grid md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-bold mb-1 text-black">Nume pachet</label>
+                    <label className="block text-sm font-bold mb-1 text-black">Nume pachet *</label>
                     <input
                       type="text"
                       value={newPackage.name || ''}
                       onChange={(e) => setNewPackage({ ...newPackage, name: e.target.value })}
-                      className="w-full px-3 py-2 border rounded text-black"
+                      className="w-full px-3 py-2 border rounded bg-white text-black"
+                      placeholder="ex: MINI SESSION"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-bold mb-1 text-black">Categorie</label>
+                    <label className="block text-sm font-bold mb-1 text-black">Categorie *</label>
                     <select
                       value={newPackage.category || ''}
                       onChange={(e) => setNewPackage({ ...newPackage, category: e.target.value })}
-                      className="w-full px-3 py-2 border rounded text-black"
+                      className="w-full px-3 py-2 border rounded bg-white text-black"
                     >
                       <option value="sedinteFoto">Ședințe Foto</option>
                       <option value="botezuri">Botezuri</option>
@@ -873,18 +1036,19 @@ export default function AdminPage() {
                       type="text"
                       value={newPackage.categoryTitle || ''}
                       onChange={(e) => setNewPackage({ ...newPackage, categoryTitle: e.target.value })}
-                      className="w-full px-3 py-2 border rounded text-black"
+                      className="w-full px-3 py-2 border rounded bg-white text-black"
                       placeholder="ex: ȘEDINȚE FOTO"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-bold mb-1 text-black">Preț (€)</label>
+                    <label className="block text-sm font-bold mb-1 text-black">Preț (€) *</label>
                     <input
                       type="number"
                       value={newPackage.price || 0}
                       onChange={(e) => setNewPackage({ ...newPackage, price: Number(e.target.value) })}
-                      className="w-full px-3 py-2 border rounded text-black"
+                      className="w-full px-3 py-2 border rounded bg-white text-black"
                       min={0}
+                      placeholder="ex: 100"
                     />
                   </div>
                   <div>
@@ -893,7 +1057,7 @@ export default function AdminPage() {
                       type="text"
                       value={newPackage.duration || ''}
                       onChange={(e) => setNewPackage({ ...newPackage, duration: e.target.value })}
-                      className="w-full px-3 py-2 border rounded text-black"
+                      className="w-full px-3 py-2 border rounded bg-white text-black"
                       placeholder="ex: 1-2 ore"
                     />
                   </div>
@@ -901,9 +1065,9 @@ export default function AdminPage() {
                     <label className="block text-sm font-bold mb-1 text-black">Caracteristici (separate prin virgulă)</label>
                     <input
                       type="text"
-                      value={newPackage.features?.join(', ') || ''}
-                      onChange={(e) => setNewPackage({ ...newPackage, features: e.target.value.split(', ') })}
-                      className="w-full px-3 py-2 border rounded text-black"
+                      value={Array.isArray(newPackage.features) ? newPackage.features.join(', ') : ''}
+                      onChange={(e) => setNewPackage({ ...newPackage, features: e.target.value.split(',').filter(f => f.trim()) })}
+                      className="w-full px-3 py-2 border rounded bg-white text-black"
                       placeholder="ex: 10-15 fotografii, Livrare online"
                     />
                   </div>
@@ -922,11 +1086,11 @@ export default function AdminPage() {
                 </div>
                 <button
                   onClick={handleCreatePackage}
-                  disabled={loading || !newPackage.name}
+                  disabled={loading || !newPackage.name || !newPackage.category}
                   className="mt-4 bg-neutral-800 text-white px-6 py-2 rounded font-bold hover:bg-neutral-700 disabled:opacity-50 flex items-center gap-2"
                 >
                   <Plus size={18} />
-                  Adaugă Pachet
+                  {loading ? 'Se adaugă...' : 'Adaugă Pachet'}
                 </button>
               </div>
 
@@ -981,6 +1145,9 @@ export default function AdminPage() {
                     </div>
                   )
                 })}
+                {packages.length === 0 && (
+                  <p className="text-center py-8 text-black">Nu există pachete. Adaugă primul pachet mai sus!</p>
+                )}
               </div>
             </div>
           </div>
@@ -1005,7 +1172,7 @@ export default function AdminPage() {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold text-black">Edit Photo</h2>
+                <h2 className="text-xl font-bold text-black">Editează Poza</h2>
                 <button
                   onClick={() => setEditingPhoto(null)}
                   className="p-2 hover:bg-neutral-300 rounded text-black"
@@ -1022,7 +1189,7 @@ export default function AdminPage() {
                 />
 
                 <div>
-                  <label className="block text-sm font-bold mb-1 text-black">Title</label>
+                  <label className="block text-sm font-bold mb-1 text-black">Titlu</label>
                   <input
                     type="text"
                     value={editingPhoto.title || ''}
@@ -1034,7 +1201,7 @@ export default function AdminPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-bold mb-1 text-black">Description</label>
+                  <label className="block text-sm font-bold mb-1 text-black">Descriere</label>
                   <textarea
                     value={editingPhoto.description || ''}
                     onChange={(e) =>
@@ -1046,7 +1213,7 @@ export default function AdminPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-bold mb-1 text-black">Category</label>
+                  <label className="block text-sm font-bold mb-1 text-black">Categorie</label>
                   <select
                     value={editingPhoto.category}
                     onChange={(e) =>
@@ -1060,10 +1227,9 @@ export default function AdminPage() {
                   </select>
                   <input
                     type="text"
-                    placeholder="Or type custom category..."
-                    value={editingPhoto.category === 'nunta' || editingPhoto.category === 'botez' || editingPhoto.category === 'majorat' || editingPhoto.category === 'sedinta' || editingPhoto.category === 'eveniment' ? '' : editingPhoto.category}
+                    placeholder="Sau scrie categoria custom..."
                     onChange={(e) =>
-                      setEditingPhoto({ ...editingPhoto, category: e.target.value || editingPhoto.category })
+                      setEditingPhoto({ ...editingPhoto, category: e.target.value })
                     }
                     className="w-full px-3 py-2 border rounded bg-white text-black mt-2"
                   />
@@ -1089,14 +1255,14 @@ export default function AdminPage() {
                     onClick={() => setEditingPhoto(null)}
                     className="px-4 py-2 border rounded hover:bg-neutral-300 text-black"
                   >
-                    Cancel
+                    Anulează
                   </button>
                   <button
                     onClick={() => handleUpdatePhoto(editingPhoto)}
                     disabled={loading}
                     className="px-4 py-2 bg-neutral-800 text-white rounded hover:bg-neutral-700 disabled:opacity-50"
                   >
-                    Save Changes
+                    Salvează
                   </button>
                 </div>
               </div>
@@ -1267,7 +1433,7 @@ export default function AdminPage() {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold text-black">Change Password</h2>
+                <h2 className="text-xl font-bold text-black">Schimbă Parola</h2>
                 <button
                   onClick={() => {
                     setShowPasswordModal(false)
@@ -1295,7 +1461,7 @@ export default function AdminPage() {
                 )}
 
                 <div>
-                  <label className="block text-sm font-bold mb-1 text-black">Current Password</label>
+                  <label className="block text-sm font-bold mb-1 text-black">Parola Curentă</label>
                   <input
                     type="password"
                     value={passwordForm.currentPassword}
@@ -1308,7 +1474,7 @@ export default function AdminPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-bold mb-1 text-black">New Password</label>
+                  <label className="block text-sm font-bold mb-1 text-black">Parola Nouă</label>
                   <input
                     type="password"
                     value={passwordForm.newPassword}
@@ -1322,7 +1488,7 @@ export default function AdminPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-bold mb-1 text-black">Confirm New Password</label>
+                  <label className="block text-sm font-bold mb-1 text-black">Confirmă Parola Nouă</label>
                   <input
                     type="password"
                     value={passwordForm.confirmPassword}
@@ -1346,14 +1512,14 @@ export default function AdminPage() {
                     }}
                     className="px-4 py-2 border rounded hover:bg-neutral-300 text-black"
                   >
-                    Cancel
+                    Anulează
                   </button>
                   <button
                     type="submit"
                     disabled={loading}
                     className="px-4 py-2 bg-neutral-800 text-white rounded hover:bg-neutral-700 disabled:opacity-50"
                   >
-                    {loading ? 'Changing...' : 'Change Password'}
+                    {loading ? 'Se schimbă...' : 'Schimbă Parola'}
                   </button>
                 </div>
               </form>
