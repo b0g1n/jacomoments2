@@ -54,8 +54,7 @@ export async function POST(request: NextRequest) {
 
     // Upload to Vercel Blob
     const blob = await put(filename, uploadBuffer, {
-      access: 'public',
-      contentType: 'image/jpeg',
+      access: 'private',
     })
 
     // Save to database
@@ -75,7 +74,7 @@ export async function POST(request: NextRequest) {
       photo: {
         id: photo.id,
         filename: photo.filename,
-        url: photo.url,
+        url: blob.url,
         category: photo.category,
         title: photo.title,
       },
