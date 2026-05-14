@@ -61,14 +61,14 @@ model Package {
 }
 
 model Category {
-  id        String   @id
+  id        String   @id @default(uuid())
   name      String   @unique
   order     Int      @default(0)
   createdAt DateTime @default(now())
 }
 
 model PricingContent {
-  id        String   @id
+  id        String   @id @default(uuid())
   key       String   @unique
   value     String
   createdAt DateTime @default(now())
