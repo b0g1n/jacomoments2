@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma, DEMO_PACKAGES } from '@/lib/prisma'
+import { prisma } from '@/lib/prisma'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -27,11 +27,6 @@ export async function GET() {
     const packages = await prisma.package.findMany({
       orderBy: [{ category: 'asc' }, { order: 'asc' }],
     })
-
-    // Return demo packages if database is empty
-    if (packages.length === 0) {
-      return NextResponse.json(DEMO_PACKAGES)
-    }
 
     // Parse features from JSON strings
     const result = packages.map((p) => ({

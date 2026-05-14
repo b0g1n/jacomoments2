@@ -21,8 +21,7 @@ interface PackageCategory {
   packages: Package[]
 }
 
-// Fallback data in case API fails
-const fallbackPricingData = {
+const SECTION_TEXT = {
   title: 'Investiție',
   subtitle: 'Pachete și Prețuri',
   description: 'Alege pachetul perfect pentru evenimentul tău. Toate pachetele includ editare profesională și galerie online.',
@@ -95,6 +94,11 @@ export default function PricingSection() {
       </section>
     )
   }
+  
+  // If there are no packages, render nothing.
+  if (categories.length === 0) {
+    return null
+  }
 
   return (
     <section id="pachete" className="relative py-32 px-4">
@@ -111,17 +115,16 @@ export default function PricingSection() {
           transition={{ duration: 0.8 }}
           className="text-center mb-16"
         >
-          <p className="elegant text-3xl md:text-4xl text-accent mb-4">{fallbackPricingData.title}</p>
-          <h2 className="font-serif text-4xl md:text-6xl font-light mb-6">{fallbackPricingData.subtitle}</h2>
+          <p className="elegant text-3xl md:text-4xl text-accent mb-4">{SECTION_TEXT.title}</p>
+          <h2 className="font-serif text-4xl md:text-6xl font-light mb-6">{SECTION_TEXT.subtitle}</h2>
           <div className="w-24 h-px bg-secondary mx-auto mb-6" />
           <p className="text-secondary/70 max-w-2xl mx-auto">
-            {fallbackPricingData.description}
+            {SECTION_TEXT.description}
           </p>
         </motion.div>
 
         {/* Category Tabs */}
-        {categories.length > 0 && (
-          <motion.div
+        <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
@@ -140,12 +143,11 @@ export default function PricingSection() {
                 {cat.title}
               </button>
             ))}
-          </motion.div>
-        )}
+        </motion.div>
 
         {/* Pricing Cards */}
         <AnimatePresence mode="wait">
-          {activeCategory ? (
+          {activeCategory && (
             <motion.div
               key={activeCategory.key}
               initial={{ opacity: 0, y: 20 }}
@@ -218,16 +220,12 @@ export default function PricingSection() {
                           : 'border-secondary/40 hover:border-secondary hover:bg-secondary hover:text-primary'
                       }`}
                     >
-                      {fallbackPricingData.select}
+                      {SECTION_TEXT.select}
                     </motion.button>
                   </a>
                 </motion.div>
               ))}
             </motion.div>
-          ) : (
-            <div className="text-center py-20 text-secondary/60">
-              <p>Nu există pachete de prețuri disponibile momentan.</p>
-            </div>
           )}
         </AnimatePresence>
 
@@ -239,9 +237,9 @@ export default function PricingSection() {
           transition={{ delay: 0.4 }}
           className="mt-20 text-center"
         >
-          <h3 className="font-serif text-2xl mb-8">{fallbackPricingData.extras.title}</h3>
+          <h3 className="font-serif text-2xl mb-8">{SECTION_TEXT.extras.title}</h3>
           <div className="flex flex-wrap justify-center gap-4 max-w-3xl mx-auto">
-            {fallbackPricingData.extras.items.map((item, index) => (
+            {SECTION_TEXT.extras.items.map((item, index) => (
               <motion.span
                 key={index}
                 initial={{ opacity: 0, scale: 0.9 }}
@@ -265,7 +263,7 @@ export default function PricingSection() {
           className="mt-16 text-center space-y-6"
         >
           <p className="text-secondary/70 max-w-2xl mx-auto">
-            {fallbackPricingData.additionalInfo}
+            {SECTION_TEXT.additionalInfo}
           </p>
 
           <div className="flex justify-center items-center">
@@ -275,7 +273,7 @@ export default function PricingSection() {
                 whileTap={{ scale: 0.95 }}
                 className="px-10 py-4 border border-secondary hover:bg-secondary hover:text-primary transition-all duration-300 tracking-widest"
               >
-                {fallbackPricingData.requestCustom}
+                {SECTION_TEXT.requestCustom}
               </motion.button>
             </a>
           </div>

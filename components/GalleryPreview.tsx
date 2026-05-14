@@ -44,6 +44,11 @@ export default function GalleryPreview() {
     )
   }
 
+  // If there are no photos, render nothing.
+  if (photos.length === 0) {
+    return null
+  }
+
   return (
     <section id="portofoliu" className="relative py-32 px-4">
       {/* Background Pattern */}
@@ -68,34 +73,28 @@ export default function GalleryPreview() {
         </motion.div>
 
         {/* Gallery Grid */}
-        {photos.length === 0 ? (
-          <div className="text-center py-20 text-secondary/60">
-            <p>Nu există poze în portofoliu momentan.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
-            {photos.map((photo, index) => (
-              <motion.div
-                key={photo.id}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-                className="relative aspect-square overflow-hidden group"
-              >
-                <Image
-                  src={photo.url}
-                  alt={photo.category}
-                  fill
-                  sizes="(max-width: 768px) 50vw, 33vw"
-                  className="object-cover transition-transform duration-700 group-hover:scale-110"
-                  loading="lazy"
-                />
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-              </motion.div>
-            ))}
-          </div>
-        )}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
+          {photos.map((photo, index) => (
+            <motion.div
+              key={photo.id}
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: index * 0.1 }}
+              className="relative aspect-square overflow-hidden group"
+            >
+              <Image
+                src={photo.url}
+                alt={photo.category}
+                fill
+                sizes="(max-width: 768px) 50vw, 33vw"
+                className="object-cover transition-transform duration-700 group-hover:scale-110"
+                loading="lazy"
+              />
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            </motion.div>
+          ))}
+        </div>
 
         {/* CTA */}
         <motion.div
