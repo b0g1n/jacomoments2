@@ -1,0 +1,25 @@
+{
+  "testimonials": [
+    {
+      "id": 1,
+      "name": "Maria Ionescu",
+      "text": "Profesionist, amabil și fotografii au ieșit absolut superbne! Recomand cu încredere!",
+      "rating": 5,
+      "date": "2024"
+    },
+    {
+      "id": 2,
+      "name": "Andrei Popescu",
+      "text": "A reușit să captureze momentele cele mai emoționante de la nunta noastră. Suntem foarte mulțumiți!",
+      "rating": 5,
+      "date": "2024"
+    },
+    {
+      "id": 3,
+      "name": "Elena Radu",
+      "text": "Un artist cu adevărat! Fotografiile sunt minunate și mult peste așteptări.",
+      "rating": 5,
+      "date": "2023"
+    }
+  ]
+}
