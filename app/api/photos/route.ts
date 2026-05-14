@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma, DEMO_PHOTOS } from '@/lib/prisma'
+import { prisma } from '@/lib/prisma'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -21,19 +21,28 @@ export async function GET(request: NextRequest) {
       orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
     })
 
-    // Return demo photos if database is empty
+    // If no photos, return empty array
     if (photos.length === 0) {
-      let filtered = DEMO_PHOTOS
-      if (category) filtered = filtered.filter(p => p.category === category)
-      if (featured === 'true') filtered = filtered.filter(p => p.featured)
-      return NextResponse.json(filtered)
+      return NextResponse.json([])
     }
 
-    return NextResponse.json(photos)
+    const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'
+    const serverUrl = `${baseUrl}/api/images/photos`
+
+    const photosWithUrls = photos.map(photo => ({
+      ...photo,
+      url: `${serverUrl}/${photo.category}/${photo.filename}`,
+      thumbnail: `${serverUrl}/${photo.category}/${photo.filename}`,
+    }))
+
+    return NextResponse.json(photosWithUrls)
+
   } catch (error) {
     console.error('Error fetching photos:', error)
-    // Fallback to demo photos on error
-    return NextResponse.json(DEMO_PHOTOS)
+    return NextResponse.json(
+      { error: 'Failed to fetch photos' },
+      { status: 500 }
+    )
   }
 }
 

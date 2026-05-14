@@ -1,75 +1,34 @@
 'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
-const pricingData = {
+interface Package {
+  id: string
+  name: string
+  category: string
+  categoryTitle: string
+  price: number
+  duration: string
+  features: string[]
+  isPopular: boolean
+  order: number
+}
+
+interface PackageCategory {
+  key: string
+  title: string
+  packages: Package[]
+}
+
+// Fallback data in case API fails
+const fallbackPricingData = {
   title: 'Investiție',
   subtitle: 'Pachete și Prețuri',
   description: 'Alege pachetul perfect pentru evenimentul tău. Toate pachetele includ editare profesională și galerie online.',
   select: 'SELECTEAZĂ',
   additionalInfo: 'Toate prețurile sunt în EUR și nu includ transport. Pentru evenimente în afara orașului, se adaugă costuri de transport și cazare după caz.',
   requestCustom: 'CERE OFERTĂ PERSONALIZATĂ',
-  sedinteFoto: {
-    title: 'ȘEDINȚE FOTO',
-    mini: {
-      name: 'MINI SESSION',
-      price: '50',
-      duration: '30–45 minute',
-      features: ['10–15 fotografii editate', 'Livrare online', 'Portrete / cuplu / familie'],
-    },
-    premium: {
-      name: 'PREMIUM SESSION',
-      price: '100',
-      duration: '1–2 ore',
-      features: ['25–40 fotografii editate profesional', 'Locație la alegere', 'Livrare online + selecție extinsă'],
-    },
-  },
-  botezuri: {
-    title: 'BOTEZURI',
-    basic: {
-      name: 'BASIC BAPTISM',
-      price: '250',
-      duration: 'Ceremonie',
-      features: ['Fotografiere ceremonie biserică', 'Fotografii cu familia și invitații', '100+ fotografii editate', 'Livrare online prin link privat'],
-    },
-    premium: {
-      name: 'PREMIUM BAPTISM',
-      price: '350',
-      duration: 'Acoperire completă',
-      features: ['Pregătiri, biserică, restaurant', '200+ fotografii editate', 'Cadre artistice & detalii', 'Preview rapid pentru social media'],
-    },
-  },
-  nunti: {
-    title: 'NUNȚI',
-    basic: {
-      name: 'WEDDING DAY',
-      price: '500',
-      duration: 'Acoperire eveniment',
-      features: ['Pregătiri + ceremonie + petrecere', '300+ fotografii editate profesional', 'Livrare online HD', 'Momente spontane și cadre artistice'],
-    },
-    premium: {
-      name: 'PREMIUM WEDDING',
-      price: '700',
-      duration: 'Acoperire extinsă',
-      features: ['Ședință foto mire & mireasă', '500+ fotografii editate', 'Preview rapid în 24–48h', 'Galerie online premium'],
-    },
-  },
-  evenimente: {
-    title: 'EVENIMENTE PRIVATE',
-    basic: {
-      name: 'EVENT BASIC',
-      price: '100',
-      duration: '1–2 ore',
-      features: ['Majorate / aniversări / petreceri private', '50+ fotografii editate'],
-    },
-    premium: {
-      name: 'EVENT PREMIUM',
-      price: '200',
-      duration: 'Acoperire extinsă',
-      features: ['Cadre atmosferice & invitați', '100+ fotografii editate', 'Livrare online'],
-    },
-  },
   extras: {
     title: 'EXTRA OPȚIONALE',
     items: [
@@ -82,15 +41,60 @@ const pricingData = {
   },
 }
 
-export default function PricingSection() {
-  const [activeCategory, setActiveCategory] = useState<'sedinteFoto' | 'botezuri' | 'nunti' | 'evenimente'>('nunti')
+function groupPackages(packages: Package[]): PackageCategory[] {
+  const grouped: { [key: string]: PackageCategory } = {}
 
-  const categories = [
-    { key: 'sedinteFoto' as const, label: 'ȘEDINȚE FOTO' },
-    { key: 'botezuri' as const, label: 'BOTEZURI' },
-    { key: 'nunti' as const, label: 'NUNȚI' },
-    { key: 'evenimente' as const, label: 'EVENIMENTE' },
-  ]
+  packages.forEach((pkg) => {
+    if (!grouped[pkg.category]) {
+      grouped[pkg.category] = {
+        key: pkg.category,
+        title: pkg.categoryTitle,
+        packages: [],
+      }
+    }
+    grouped[pkg.category].packages.push(pkg)
+  })
+
+  return Object.values(grouped)
+}
+
+export default function PricingSection() {
+  const [loading, setLoading] = useState(true)
+  const [categories, setCategories] = useState<PackageCategory[]>([])
+  const [activeCategoryKey, setActiveCategoryKey] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchPackages = async () => {
+      try {
+        const res = await fetch('/api/packages')
+        if (!res.ok) throw new Error('Failed to fetch packages')
+        const data: Package[] = await res.json()
+
+        if (data && data.length > 0) {
+          const grouped = groupPackages(data)
+          setCategories(grouped)
+          setActiveCategoryKey(grouped[0]?.key || null)
+        }
+      } catch (error) {
+        console.error('Error fetching packages:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchPackages()
+  }, [])
+
+  const activeCategory = categories.find((c) => c.key === activeCategoryKey)
+
+  if (loading) {
+    return (
+      <section id="pachete" className="relative py-32 px-4">
+        <div className="max-w-7xl mx-auto text-center">
+          <div className="inline-block w-12 h-12 border-4 border-secondary border-t-accent rounded-full animate-spin" />
+        </div>
+      </section>
+    )
+  }
 
   return (
     <section id="pachete" className="relative py-32 px-4">
@@ -107,64 +111,62 @@ export default function PricingSection() {
           transition={{ duration: 0.8 }}
           className="text-center mb-16"
         >
-          <p className="elegant text-3xl md:text-4xl text-accent mb-4">{pricingData.title}</p>
-          <h2 className="font-serif text-4xl md:text-6xl font-light mb-6">{pricingData.subtitle}</h2>
+          <p className="elegant text-3xl md:text-4xl text-accent mb-4">{fallbackPricingData.title}</p>
+          <h2 className="font-serif text-4xl md:text-6xl font-light mb-6">{fallbackPricingData.subtitle}</h2>
           <div className="w-24 h-px bg-secondary mx-auto mb-6" />
           <p className="text-secondary/70 max-w-2xl mx-auto">
-            {pricingData.description}
+            {fallbackPricingData.description}
           </p>
         </motion.div>
 
         {/* Category Tabs */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="flex flex-wrap justify-center gap-4 mb-16"
-        >
-          {categories.map((cat) => (
-            <button
-              key={cat.key}
-              onClick={() => setActiveCategory(cat.key)}
-              className={`px-6 py-3 border transition-all duration-300 tracking-widest text-sm ${
-                activeCategory === cat.key
-                  ? 'bg-secondary text-primary border-secondary'
-                  : 'border-secondary/30 hover:border-secondary'
-              }`}
-            >
-              {cat.label}
-            </button>
-          ))}
-        </motion.div>
+        {categories.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="flex flex-wrap justify-center gap-4 mb-16"
+          >
+            {categories.map((cat) => (
+              <button
+                key={cat.key}
+                onClick={() => setActiveCategoryKey(cat.key)}
+                className={`px-6 py-3 border transition-all duration-300 tracking-widest text-sm ${
+                  activeCategoryKey === cat.key
+                    ? 'bg-secondary text-primary border-secondary'
+                    : 'border-secondary/30 hover:border-secondary'
+                }`}
+              >
+                {cat.title}
+              </button>
+            ))}
+          </motion.div>
+        )}
 
         {/* Pricing Cards */}
         <AnimatePresence mode="wait">
-          <motion.div
-            key={activeCategory}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-            className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto"
-          >
-            {(() => {
-              const cat = pricingData[activeCategory] as any
-              const packages = [cat.mini || cat.basic, cat.premium].filter(Boolean)
-
-              return packages.map((pkg: any, index: number) => (
+          {activeCategory ? (
+            <motion.div
+              key={activeCategory.key}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+              className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto"
+            >
+              {activeCategory.packages.map((pkg, index) => (
                 <motion.div
-                  key={index}
+                  key={pkg.id}
                   initial={{ opacity: 0, y: 30 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.1 }}
                   className={`relative p-8 border transition-all duration-500 ${
-                    index === 1
+                    pkg.isPopular
                       ? 'border-secondary bg-secondary/5 scale-105'
                       : 'border-secondary/20 hover:border-secondary/40'
                   }`}
                 >
-                  {/* Highlight Badge for Premium */}
-                  {index === 1 && (
+                  {pkg.isPopular && (
                     <motion.div
                       initial={{ opacity: 0, scale: 0.8 }}
                       animate={{ opacity: 1, scale: 1 }}
@@ -180,10 +182,8 @@ export default function PricingSection() {
                   <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-secondary/30" />
                   <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-secondary/30" />
 
-                  {/* Package Name */}
                   <h3 className="font-serif text-2xl mb-4 tracking-wider">{pkg.name}</h3>
 
-                  {/* Price */}
                   <div className="mb-6">
                     <div className="flex items-baseline">
                       <span className="text-5xl font-light">{pkg.price}</span>
@@ -192,9 +192,8 @@ export default function PricingSection() {
                     <div className="text-sm text-secondary/60 mt-1">{pkg.duration}</div>
                   </div>
 
-                  {/* Features */}
                   <ul className="space-y-3 mb-8">
-                    {pkg.features.map((feature: string, idx: number) => (
+                    {pkg.features.map((feature, idx) => (
                       <motion.li
                         key={idx}
                         initial={{ opacity: 0, x: -10 }}
@@ -209,24 +208,27 @@ export default function PricingSection() {
                     ))}
                   </ul>
 
-                  {/* CTA Button */}
                   <a href="/contact">
                     <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                       className={`w-full py-3 border transition-all duration-300 tracking-widest text-sm ${
-                        index === 1
+                        pkg.isPopular
                           ? 'bg-secondary text-primary border-secondary hover:bg-accent'
                           : 'border-secondary/40 hover:border-secondary hover:bg-secondary hover:text-primary'
                       }`}
                     >
-                      {pricingData.select}
+                      {fallbackPricingData.select}
                     </motion.button>
                   </a>
                 </motion.div>
-              ))
-            })()}
-          </motion.div>
+              ))}
+            </motion.div>
+          ) : (
+            <div className="text-center py-20 text-secondary/60">
+              <p>Nu există pachete de prețuri disponibile momentan.</p>
+            </div>
+          )}
         </AnimatePresence>
 
         {/* Extra Options */}
@@ -237,9 +239,9 @@ export default function PricingSection() {
           transition={{ delay: 0.4 }}
           className="mt-20 text-center"
         >
-          <h3 className="font-serif text-2xl mb-8">{pricingData.extras.title}</h3>
+          <h3 className="font-serif text-2xl mb-8">{fallbackPricingData.extras.title}</h3>
           <div className="flex flex-wrap justify-center gap-4 max-w-3xl mx-auto">
-            {pricingData.extras.items.map((item: string, index: number) => (
+            {fallbackPricingData.extras.items.map((item, index) => (
               <motion.span
                 key={index}
                 initial={{ opacity: 0, scale: 0.9 }}
@@ -263,7 +265,7 @@ export default function PricingSection() {
           className="mt-16 text-center space-y-6"
         >
           <p className="text-secondary/70 max-w-2xl mx-auto">
-            {pricingData.additionalInfo}
+            {fallbackPricingData.additionalInfo}
           </p>
 
           <div className="flex justify-center items-center">
@@ -273,7 +275,7 @@ export default function PricingSection() {
                 whileTap={{ scale: 0.95 }}
                 className="px-10 py-4 border border-secondary hover:bg-secondary hover:text-primary transition-all duration-300 tracking-widest"
               >
-                {pricingData.requestCustom}
+                {fallbackPricingData.requestCustom}
               </motion.button>
             </a>
           </div>
