@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import sharp from 'sharp'
 import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 
 export const dynamic = 'force-dynamic'
 
-// POST - Handle actual file uploads with image optimization
+// POST - Handle actual file uploads
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
@@ -26,52 +25,59 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
 
-    // Generate filename
+    // Generate filename - always use .jpg extension since we convert to JPEG
     const timestamp = Date.now()
     const random = Math.random().toString(36).substring(7)
-    const ext = file.name.split('.').pop()
-    const filename = `${timestamp}-${random}.${ext}`
+    const filename = `${timestamp}-${random}.jpg`
 
     // Create category directory if it doesn't exist
     const publicDir = join(process.cwd(), 'public', 'photos', category)
     await mkdir(publicDir, { recursive: true })
 
-    // Optimize image based on size
-    let optimizedBuffer: Buffer = buffer
+    // Try to use Sharp for optimization, fall back to saving as-is if it fails
+    let finalBuffer = buffer
 
-    // Get image metadata
-    const metadata = await sharp(buffer).metadata()
-    const width = metadata.width || 0
-    const height = metadata.height || 0
+    try {
+      // Dynamic import for Sharp (better for Vercel)
+      const sharp = (await import('sharp')).default
 
-    // Calculate if we need to resize (max dimension 1920px)
-    const maxDimension = 1920
-    if (width > maxDimension || height > maxDimension) {
-      const image = sharp(buffer)
-      if (width > height) {
-        image.resize(maxDimension, null, {
-          withoutEnlargement: true,
-          fit: 'inside'
-        })
-      } else {
-        image.resize(null, maxDimension, {
-          withoutEnlargement: true,
-          fit: 'inside'
-        })
+      // Get image metadata
+      const metadata = await sharp(buffer).metadata()
+      const width = metadata.width || 0
+      const height = metadata.height || 0
+
+      // Calculate if we need to resize (max dimension 1920px)
+      const maxDimension = 1920
+      let image = sharp(buffer)
+
+      if (width > maxDimension || height > maxDimension) {
+        if (width > height) {
+          image = image.resize(maxDimension, null, {
+            withoutEnlargement: true,
+            fit: 'inside'
+          })
+        } else {
+          image = image.resize(null, maxDimension, {
+            withoutEnlargement: true,
+            fit: 'inside'
+          })
+        }
       }
-      optimizedBuffer = Buffer.from(await image
-        .jpeg({ quality: 85 }) // Compress to 85% quality
-        .toBuffer())
-    } else {
-      // Just compress if under size limit
-      optimizedBuffer = Buffer.from(await sharp(buffer)
+
+      // Convert to JPEG with 85% quality
+      finalBuffer = Buffer.from(await image
         .jpeg({ quality: 85 })
         .toBuffer())
+
+    } catch (sharpError) {
+      // Sharp not available or failed - save original file
+      console.warn('Sharp optimization failed, saving original:', sharpError)
+      // Keep original buffer
     }
 
-    // Save optimized image
+    // Save image
     const outputPath = join(publicDir, filename)
-    await writeFile(outputPath, optimizedBuffer)
+    await writeFile(outputPath, finalBuffer)
 
     // Generate URL path
     const url = `/photos/${category}/${filename}`
@@ -83,7 +89,7 @@ export async function POST(request: NextRequest) {
         url,
         thumbnail: url,
         category,
-        title: file.name,
+        title: file.name.replace(/\.[^/.]+$/, ''), // Remove extension from title
         featured: false,
       },
     })

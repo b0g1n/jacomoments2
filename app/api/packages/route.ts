@@ -33,9 +33,8 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    console.log('Received package data:', body)
 
-    const { id, name, category, categoryTitle, price, duration, features, isPopular, order } = body
+    const { name, category, categoryTitle, price, duration, features, isPopular, order } = body
 
     // Validate required fields
     if (!name || !category) {
@@ -45,17 +44,13 @@ export async function POST(request: NextRequest) {
     // Handle features - convert array to JSON string
     let featuresString = '[]'
     if (Array.isArray(features)) {
-      featuresString = JSON.stringify(features.filter(f => f && f.trim()))
+      featuresString = JSON.stringify(features.filter((f: string) => f && f.trim()))
     } else if (typeof features === 'string') {
       featuresString = features
     }
 
-    // Generate ID if not provided
-    const packageId = id || `pkg-${Date.now()}`
-
     const pkg = await prisma.package.create({
       data: {
-        id: packageId,
         name,
         category,
         categoryTitle: categoryTitle || category,
@@ -72,8 +67,6 @@ export async function POST(request: NextRequest) {
       ...pkg,
       features: JSON.parse(pkg.features),
     }
-
-    console.log('Package created successfully:', result)
 
     return NextResponse.json(result)
   } catch (error) {
