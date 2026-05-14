@@ -353,7 +353,7 @@ export default function AdminPage() {
           formData.append('file', file)
           formData.append('category', category)
 
-          const res = await fetch('/api/upload', {
+          const res = await fetch('/api/upload/blob', {
             method: 'POST',
             body: formData,
           })
