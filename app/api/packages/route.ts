@@ -9,10 +9,22 @@ export async function GET() {
     const packages = await prisma.package.findMany({
       orderBy: [{ category: 'asc' }, { order: 'asc' }],
     })
-    return NextResponse.json(
-      packages.map((p) => ({ ...p, features: JSON.parse(p.features) }))
-    )
-  } catch {
+
+    // Parse features from JSON strings
+    const result = packages.map((p) => {
+      try {
+        return {
+          ...p,
+          features: JSON.parse(p.features || '[]'),
+        }
+      } catch {
+        return { ...p, features: [] }
+      }
+    })
+
+    return NextResponse.json(result)
+  } catch (error) {
+    console.error('Error fetching packages:', error)
     return NextResponse.json([])
   }
 }
@@ -20,34 +32,60 @@ export async function GET() {
 // POST create new package
 export async function POST(request: NextRequest) {
   try {
-    const { id, name, category, categoryTitle, price, duration, features, isPopular, order } = await request.json()
+    const body = await request.json()
+    console.log('Received package data:', body)
 
-    if (!name || !category || !price) {
-      return NextResponse.json({ error: 'Name, category, and price are required' }, { status: 400 })
+    const { id, name, category, categoryTitle, price, duration, features, isPopular, order } = body
+
+    // Validate required fields
+    if (!name || !category) {
+      return NextResponse.json({ error: 'Name and category are required' }, { status: 400 })
     }
+
+    // Handle features - convert array to JSON string
+    let featuresString = '[]'
+    if (Array.isArray(features)) {
+      featuresString = JSON.stringify(features.filter(f => f && f.trim()))
+    } else if (typeof features === 'string') {
+      featuresString = features
+    }
+
+    // Generate ID if not provided
+    const packageId = id || `pkg-${Date.now()}`
 
     const pkg = await prisma.package.create({
       data: {
-        id: id || `pkg-${Date.now()}`,
+        id: packageId,
         name,
         category,
         categoryTitle: categoryTitle || category,
         price: Number(price) || 0,
         duration: duration || '',
-        features: typeof features === 'string' ? features : JSON.stringify(features || []),
+        features: featuresString,
         isPopular: Boolean(isPopular),
         order: Number(order) || 0,
       },
     })
 
-    return NextResponse.json({ ...pkg, features: JSON.parse(pkg.features) })
+    // Return parsed features
+    const result = {
+      ...pkg,
+      features: JSON.parse(pkg.features),
+    }
+
+    console.log('Package created successfully:', result)
+
+    return NextResponse.json(result)
   } catch (error) {
     console.error('Error creating package:', error)
-    return NextResponse.json({ error: 'Failed to create package' }, { status: 500 })
+    return NextResponse.json({
+      error: 'Failed to create package',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 })
   }
 }
 
-// PUT update package (bulk update support)
+// PUT update package
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
@@ -76,9 +114,12 @@ export async function PUT(request: NextRequest) {
         orderBy: [{ category: 'asc' }, { order: 'asc' }],
       })
 
-      return NextResponse.json(
-        packages.map((p) => ({ ...p, features: JSON.parse(p.features) }))
-      )
+      const result = packages.map((p) => ({
+        ...p,
+        features: JSON.parse(p.features || '[]'),
+      }))
+
+      return NextResponse.json(result)
     }
 
     // Single package update
@@ -88,21 +129,28 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Package ID is required' }, { status: 400 })
     }
 
+    const updateData: any = {}
+
+    if (name !== undefined) updateData.name = name
+    if (category !== undefined) updateData.category = category
+    if (categoryTitle !== undefined) updateData.categoryTitle = categoryTitle
+    if (price !== undefined) updateData.price = Number(price)
+    if (duration !== undefined) updateData.duration = duration
+    if (isPopular !== undefined) updateData.isPopular = Boolean(isPopular)
+    if (order !== undefined) updateData.order = Number(order)
+    if (features !== undefined) {
+      updateData.features = typeof features === 'string' ? features : JSON.stringify(features)
+    }
+
     const pkg = await prisma.package.update({
       where: { id },
-      data: {
-        name,
-        category,
-        categoryTitle,
-        price: price !== undefined ? Number(price) : undefined,
-        duration,
-        features: features !== undefined ? (typeof features === 'string' ? features : JSON.stringify(features)) : undefined,
-        isPopular,
-        order,
-      },
+      data: updateData,
     })
 
-    return NextResponse.json({ ...pkg, features: JSON.parse(pkg.features) })
+    return NextResponse.json({
+      ...pkg,
+      features: JSON.parse(pkg.features || '[]'),
+    })
   } catch (error) {
     console.error('Error updating package:', error)
     return NextResponse.json({ error: 'Failed to update package' }, { status: 500 })

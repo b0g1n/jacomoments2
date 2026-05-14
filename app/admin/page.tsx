@@ -18,6 +18,7 @@ import {
   Package,
   Tag,
   Layers,
+  AlertCircle,
 } from 'lucide-react'
 
 interface Photo {
@@ -79,9 +80,8 @@ export default function AdminPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [packages, setPackages] = useState<Package[]>([])
   const [pricingContent, setPricingContent] = useState<PricingContent[]>([])
-  const [categories, setCategories] = useState<Category[]>([])
+
   const [editingPackage, setEditingPackage] = useState<Package | null>(null)
-  const [editingContent, setEditingContent] = useState<PricingContent | null>(null)
   const [newPackage, setNewPackage] = useState<Partial<Package>>({
     name: '',
     category: 'sedinteFoto',
@@ -92,9 +92,12 @@ export default function AdminPage() {
     isPopular: false,
     order: 0,
   })
+
   const [loading, setLoading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 })
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+
   const [editingPhoto, setEditingPhoto] = useState<Photo | null>(null)
   const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set())
 
@@ -148,16 +151,6 @@ export default function AdminPage() {
     }
   }
 
-  const fetchCategories = async () => {
-    try {
-      const res = await fetch('/api/categories')
-      const data = await res.json()
-      setCategories(data)
-    } catch (error) {
-      console.error('Error fetching categories:', error)
-    }
-  }
-
   const fetchMessages = async () => {
     try {
       const res = await fetch('/api/messages')
@@ -174,7 +167,6 @@ export default function AdminPage() {
       fetchMessages()
       fetchPackages()
       fetchPricingContent()
-      fetchCategories()
     }
   }, [isAuthenticated])
 
@@ -206,12 +198,10 @@ export default function AdminPage() {
         categoryTitle: newPackage.categoryTitle || newPackage.category,
         price: Number(newPackage.price) || 0,
         duration: newPackage.duration || '',
-        features: Array.isArray(newPackage.features) ? newPackage.features : [],
+        features: Array.isArray(newPackage.features) ? newPackage.features.filter(f => f.trim()) : [],
         isPopular: Boolean(newPackage.isPopular),
         order: Number(newPackage.order) || 0,
       }
-
-      console.log('Creating package with payload:', payload)
 
       const res = await fetch('/api/packages', {
         method: 'POST',
@@ -236,7 +226,7 @@ export default function AdminPage() {
         showMessage('Pachet adăugat cu succes!')
       } else {
         console.error('Error response:', data)
-        showMessage(data.error || 'Eroare la adăugarea pachetului', true)
+        showMessage(data.error || data.details || 'Eroare la adăugarea pachetului', true)
       }
     } catch (error) {
       console.error('Error creating package:', error)
@@ -266,7 +256,8 @@ export default function AdminPage() {
         setEditingPackage(null)
         showMessage('Pachet actualizat!')
       } else {
-        showMessage('Eroare la actualizare', true)
+        const data = await res.json()
+        showMessage(data.error || 'Eroare la actualizare', true)
       }
     } catch (error) {
       console.error('Error updating package:', error)
@@ -285,7 +276,6 @@ export default function AdminPage() {
       await fetchPackages()
       showMessage('Pachet șters!')
     } catch (error) {
-      console.error('Error deleting package:', error)
       showMessage('Eroare la ștergere', true)
     } finally {
       setLoading(false)
@@ -303,7 +293,6 @@ export default function AdminPage() {
       })
       if (res.ok) {
         await fetchPricingContent()
-        setEditingContent(null)
         showMessage('Conținut actualizat!')
       }
     } catch (error) {
@@ -331,10 +320,10 @@ export default function AdminPage() {
         setIsAuthenticated(true)
         setLoginError('')
       } else {
-        setLoginError('Invalid password')
+        setLoginError('Parolă incorectă')
       }
     } catch (error) {
-      setLoginError('Login failed')
+      setLoginError('Eroare la conectare')
     } finally {
       setLoading(false)
     }
@@ -348,56 +337,59 @@ export default function AdminPage() {
     }
 
     setLoading(true)
+    setUploadProgress({ current: 0, total: files.length })
     setErrorMessage('')
 
+    let successCount = 0
+    let errorCount = 0
+
     try {
-      const uploadPromises = Array.from(files).map(async (file) => {
-        const formData = new FormData()
-        formData.append('file', file)
-        formData.append('category', category)
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        setUploadProgress({ current: i + 1, total: files.length })
 
-        const res = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData,
-        })
+        try {
+          const formData = new FormData()
+          formData.append('file', file)
+          formData.append('category', category)
 
-        return await res.json()
-      })
-
-      const uploads = await Promise.all(uploadPromises)
-
-      // Create photo entries in database
-      let successCount = 0
-      for (const upload of uploads) {
-        if (upload.success) {
-          await fetch('/api/photos', {
+          const res = await fetch('/api/upload', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              filename: upload.filename,
-              url: upload.url,
-              category: upload.category,
-              tags: [],
-            }),
+            body: formData,
           })
-          successCount++
+
+          const data = await res.json()
+
+          if (data.success) {
+            successCount++
+          } else {
+            errorCount++
+            console.error('Upload failed for file:', file.name, data.error)
+          }
+        } catch (err) {
+          errorCount++
+          console.error('Upload error for file:', file.name, err)
         }
       }
 
       await fetchPhotos()
       setSingleUploadFile(null)
       setBulkUploadFiles(null)
+      setUploadProgress({ current: 0, total: 0 })
 
-      if (successCount === uploads.length) {
-        showMessage(`${successCount} poze încărcate cu succes!`)
+      if (successCount === files.length) {
+        showMessage(`Toate ${successCount} poze încărcate cu succes!`)
+      } else if (successCount > 0) {
+        showMessage(`${successCount}/${files.length} poze încărcate. ${errorCount} eșuate.`, errorCount > 0)
       } else {
-        showMessage(`${successCount}/${uploads.length} poze încărcate`, true)
+        showMessage('Încărcarea a eșuat. Verifică consola pentru detalii.', true)
       }
     } catch (error) {
       console.error('Error uploading photos:', error)
       showMessage('Eroare la încărcare', true)
     } finally {
       setLoading(false)
+      setUploadProgress({ current: 0, total: 0 })
     }
   }
 
@@ -433,7 +425,7 @@ export default function AdminPage() {
 
   // Delete photo
   const handleDeletePhoto = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this photo?')) return
+    if (!confirm('Ștergi această poză?')) return
 
     setLoading(true)
 
@@ -442,7 +434,7 @@ export default function AdminPage() {
       await fetchPhotos()
       showMessage('Foto ștearsă!')
     } catch (error) {
-      console.error('Error deleting photo:', error)
+      showMessage('Eroare la ștergere', true)
     } finally {
       setLoading(false)
     }
@@ -451,7 +443,7 @@ export default function AdminPage() {
   // Bulk delete photos
   const handleBulkDelete = async () => {
     if (selectedPhotos.size === 0) return
-    if (!confirm(`Delete ${selectedPhotos.size} photos?`)) return
+    if (!confirm(`Ștergi ${selectedPhotos.size} poze?`)) return
 
     setLoading(true)
 
@@ -465,7 +457,7 @@ export default function AdminPage() {
       await fetchPhotos()
       showMessage('Poze șterse!')
     } catch (error) {
-      console.error('Error bulk deleting photos:', error)
+      showMessage('Eroare la ștergere', true)
     } finally {
       setLoading(false)
     }
@@ -487,7 +479,7 @@ export default function AdminPage() {
 
   // Delete message
   const handleDeleteMessage = async (id: string) => {
-    if (!confirm('Delete this message?')) return
+    if (!confirm('Ștergi acest mesaj?')) return
 
     setLoading(true)
 
@@ -496,7 +488,7 @@ export default function AdminPage() {
       await fetchMessages()
       showMessage('Mesaj șters!')
     } catch (error) {
-      console.error('Error deleting message:', error)
+      showMessage('Eroare la ștergere', true)
     } finally {
       setLoading(false)
     }
@@ -509,12 +501,12 @@ export default function AdminPage() {
     setPasswordSuccess('')
 
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      setPasswordError('New passwords do not match')
+      setPasswordError('Parolele nu coincid')
       return
     }
 
     if (passwordForm.newPassword.length < 6) {
-      setPasswordError('New password must be at least 6 characters')
+      setPasswordError('Parola trebuie să aibă cel puțin 6 caractere')
       return
     }
 
@@ -534,17 +526,17 @@ export default function AdminPage() {
       const data = await res.json()
 
       if (data.success) {
-        setPasswordSuccess('Password changed successfully!')
+        setPasswordSuccess('Parola schimbată cu succes!')
         setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
         setTimeout(() => {
           setShowPasswordModal(false)
           setPasswordSuccess('')
         }, 2000)
       } else {
-        setPasswordError(data.error || 'Failed to change password')
+        setPasswordError(data.error || 'Eroare la schimbarea parolei')
       }
     } catch (error) {
-      setPasswordError('Failed to change password')
+      setPasswordError('Eroare la schimbarea parolei')
     } finally {
       setLoading(false)
     }
@@ -581,7 +573,7 @@ export default function AdminPage() {
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-neutral-100 rounded-lg p-8 max-w-md w-full shadow-xl"
+          className="bg-white rounded-lg p-8 max-w-md w-full shadow-xl"
         >
           <h1 className="text-2xl font-bold text-center mb-6 text-black">
             Admin Login
@@ -592,8 +584,8 @@ export default function AdminPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter admin password"
-                className="w-full px-4 py-3 border border-neutral-300 rounded focus:outline-none focus:border-neutral-400 bg-white text-black"
+                placeholder="Introdu parola admin"
+                className="w-full px-4 py-3 border border-gray-300 rounded focus:outline-none focus:border-black bg-white text-black"
                 autoFocus
               />
             </div>
@@ -603,9 +595,9 @@ export default function AdminPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-neutral-800 text-white py-3 rounded font-bold hover:bg-neutral-700 disabled:opacity-50 transition-colors"
+              className="w-full bg-black text-white py-3 rounded font-bold hover:bg-gray-800 disabled:opacity-50 transition-colors"
             >
-              {loading ? 'Logging in...' : 'Login'}
+              {loading ? 'Se conectează...' : 'Conectare'}
             </button>
           </form>
         </motion.div>
@@ -617,20 +609,20 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-black text-white">
       {/* Header */}
-      <header className="bg-neutral-100 text-black py-4 px-6 shadow-lg">
+      <header className="bg-white text-black py-4 px-6 shadow-lg">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <h1 className="text-2xl font-bold">Jaco Moments Admin</h1>
           <div className="flex items-center gap-3">
             <button
               onClick={() => setShowPasswordModal(true)}
-              className="flex items-center gap-2 px-4 py-2 border border-neutral-400 text-black rounded hover:bg-neutral-800 hover:text-white transition-colors"
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-black rounded hover:bg-black hover:text-white transition-colors"
             >
               <KeyRound size={18} />
               Schimbă Parola
             </button>
             <button
               onClick={() => setIsAuthenticated(false)}
-              className="flex items-center gap-2 px-4 py-2 bg-neutral-800 text-white rounded hover:bg-neutral-700 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-black text-white rounded hover:bg-gray-800 transition-colors"
             >
               <LogOut size={18} />
               Logout
@@ -640,14 +632,14 @@ export default function AdminPage() {
       </header>
 
       {/* Tabs */}
-      <div className="bg-neutral-100 border-b border-neutral-300">
+      <div className="bg-white border-b border-gray-300">
         <div className="max-w-7xl mx-auto flex">
           <button
             onClick={() => setActiveTab('photos')}
             className={`px-6 py-4 font-bold flex items-center gap-2 transition-colors ${
               activeTab === 'photos'
-                ? 'text-black border-b-2 border-neutral-400'
-                : 'text-black hover:text-black'
+                ? 'text-black border-b-2 border-black'
+                : 'text-gray-600 hover:text-black'
             }`}
           >
             <ImageIcon size={18} />
@@ -657,14 +649,14 @@ export default function AdminPage() {
             onClick={() => setActiveTab('messages')}
             className={`px-6 py-4 font-bold flex items-center gap-2 transition-colors ${
               activeTab === 'messages'
-                ? 'text-black border-b-2 border-neutral-400'
-                : 'text-black hover:text-black'
+                ? 'text-black border-b-2 border-black'
+                : 'text-gray-600 hover:text-black'
             }`}
           >
             <MessageSquare size={18} />
             Mesaje
             {messages.filter((m) => !m.read).length > 0 && (
-              <span className="bg-neutral-800 text-white text-xs px-2 py-0.5 rounded-full">
+              <span className="bg-black text-white text-xs px-2 py-0.5 rounded-full">
                 {messages.filter((m) => !m.read).length}
               </span>
             )}
@@ -673,8 +665,8 @@ export default function AdminPage() {
             onClick={() => setActiveTab('packages')}
             className={`px-6 py-4 font-bold flex items-center gap-2 transition-colors ${
               activeTab === 'packages'
-                ? 'text-black border-b-2 border-neutral-400'
-                : 'text-black hover:text-black'
+                ? 'text-black border-b-2 border-black'
+                : 'text-gray-600 hover:text-black'
             }`}
           >
             <Package size={18} />
@@ -685,13 +677,22 @@ export default function AdminPage() {
 
       {/* Success/Error Messages */}
       {errorMessage && (
-        <div className="bg-red-600 text-white px-6 py-3 text-center font-bold">
+        <div className="bg-red-600 text-white px-6 py-3 text-center font-bold flex items-center justify-center gap-2">
+          <AlertCircle size={20} />
           {errorMessage}
         </div>
       )}
       {successMessage && (
-        <div className="bg-green-600 text-white px-6 py-3 text-center font-bold">
+        <div className="bg-green-600 text-white px-6 py-3 text-center font-bold flex items-center justify-center gap-2">
+          <Check size={20} />
           {successMessage}
+        </div>
+      )}
+
+      {/* Upload Progress */}
+      {uploadProgress.total > 0 && (
+        <div className="bg-blue-600 text-white px-6 py-3 text-center">
+          Se încarcă: {uploadProgress.current} / {uploadProgress.total} poze...
         </div>
       )}
 
@@ -700,11 +701,11 @@ export default function AdminPage() {
         {activeTab === 'photos' && (
           <div>
             {/* Upload Section */}
-            <div className="bg-neutral-100 rounded-lg p-6 mb-6">
+            <div className="bg-white rounded-lg p-6 mb-6">
               <h2 className="text-xl font-bold text-black mb-4">Încarcă Poze</h2>
               <div className="grid md:grid-cols-2 gap-6">
                 {/* Single Upload */}
-                <div className="bg-white rounded-lg p-4 border border-neutral-300">
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-300">
                   <h3 className="font-bold text-black mb-3">Încărcare Single</h3>
 
                   <div className="mb-3">
@@ -712,7 +713,7 @@ export default function AdminPage() {
                       type="file"
                       accept="image/*"
                       onChange={(e) => setSingleUploadFile(e.target.files)}
-                      className="w-full text-black file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-neutral-200 file:text-black hover:file:bg-neutral-300"
+                      className="w-full text-black file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-gray-200 file:text-black hover:file:bg-gray-300"
                     />
                   </div>
 
@@ -734,7 +735,7 @@ export default function AdminPage() {
                       <select
                         value={uploadCategory}
                         onChange={(e) => setUploadCategory(e.target.value)}
-                        className="w-full px-3 py-2 border rounded bg-white text-black"
+                        className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-black"
                       >
                         {PREDEFINED_CATEGORIES.map(cat => (
                           <option key={cat} value={cat}>{cat}</option>
@@ -746,7 +747,7 @@ export default function AdminPage() {
                         placeholder="Introdu categoria custom..."
                         value={customCategory}
                         onChange={(e) => setCustomCategory(e.target.value)}
-                        className="w-full px-3 py-2 border rounded bg-white text-black"
+                        className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-black"
                       />
                     )}
                   </div>
@@ -754,7 +755,7 @@ export default function AdminPage() {
                   <button
                     onClick={() => singleUploadFile && handleUpload(singleUploadFile, getUploadCategory())}
                     disabled={loading || !singleUploadFile}
-                    className="w-full bg-neutral-800 text-white px-4 py-2 rounded font-bold hover:bg-neutral-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="w-full bg-black text-white px-4 py-2 rounded font-bold hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     <Upload size={18} />
                     {loading ? 'Se încarcă...' : 'Încarcă Poza'}
@@ -762,7 +763,7 @@ export default function AdminPage() {
                 </div>
 
                 {/* Bulk Upload */}
-                <div className="bg-white rounded-lg p-4 border border-neutral-300">
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-300">
                   <h3 className="font-bold text-black mb-3">Încărcare Multiplă</h3>
 
                   <div className="mb-3">
@@ -771,10 +772,10 @@ export default function AdminPage() {
                       accept="image/*"
                       multiple
                       onChange={(e) => setBulkUploadFiles(e.target.files)}
-                      className="w-full text-black file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-neutral-200 file:text-black hover:file:bg-neutral-300"
+                      className="w-full text-black file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-gray-200 file:text-black hover:file:bg-gray-300"
                     />
                     {bulkUploadFiles && bulkUploadFiles.length > 0 && (
-                      <p className="text-sm text-black mt-1">{bulkUploadFiles.length} fișiere selectate</p>
+                      <p className="text-sm text-black mt-1 font-medium">{bulkUploadFiles.length} fișiere selectate</p>
                     )}
                   </div>
 
@@ -796,7 +797,7 @@ export default function AdminPage() {
                       <select
                         value={bulkUploadCategory}
                         onChange={(e) => setBulkUploadCategory(e.target.value)}
-                        className="w-full px-3 py-2 border rounded bg-white text-black"
+                        className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-black"
                       >
                         {PREDEFINED_CATEGORIES.map(cat => (
                           <option key={cat} value={cat}>{cat}</option>
@@ -808,7 +809,7 @@ export default function AdminPage() {
                         placeholder="Introdu categoria custom..."
                         value={bulkCustomCategory}
                         onChange={(e) => setBulkCustomCategory(e.target.value)}
-                        className="w-full px-3 py-2 border rounded bg-white text-black"
+                        className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-black"
                       />
                     )}
                   </div>
@@ -816,7 +817,7 @@ export default function AdminPage() {
                   <button
                     onClick={() => bulkUploadFiles && handleUpload(bulkUploadFiles, getBulkUploadCategory())}
                     disabled={loading || !bulkUploadFiles || bulkUploadFiles.length === 0}
-                    className="w-full bg-neutral-800 text-white px-4 py-2 rounded font-bold hover:bg-neutral-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="w-full bg-black text-white px-4 py-2 rounded font-bold hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     <Upload size={18} />
                     {loading ? 'Se încarcă...' : `Încarcă ${bulkUploadFiles?.length || 0} Poze`}
@@ -828,10 +829,10 @@ export default function AdminPage() {
             {/* Bulk Actions */}
             {selectedPhotos.size > 0 && (
               <div className="bg-red-600 text-white rounded-lg p-4 mb-6 flex justify-between items-center">
-                <span>{selectedPhotos.size} poze selectate</span>
+                <span className="font-bold">{selectedPhotos.size} poze selectate</span>
                 <button
                   onClick={handleBulkDelete}
-                  className="flex items-center gap-2 bg-white text-red-600 px-4 py-2 rounded hover:bg-gray-100"
+                  className="flex items-center gap-2 bg-white text-red-600 px-4 py-2 rounded hover:bg-gray-100 font-bold"
                 >
                   <Trash2 size={18} />
                   Șterge Selectate
@@ -844,8 +845,8 @@ export default function AdminPage() {
               {photos.map((photo) => (
                 <div
                   key={photo.id}
-                  className={`relative group bg-neutral-100 rounded-lg overflow-hidden ${
-                    selectedPhotos.has(photo.id) ? 'ring-2 ring-white' : ''
+                  className={`relative group bg-gray-100 rounded-lg overflow-hidden ${
+                    selectedPhotos.has(photo.id) ? 'ring-4 ring-black' : ''
                   }`}
                 >
                   <img
@@ -853,18 +854,20 @@ export default function AdminPage() {
                     alt={photo.title || photo.filename}
                     className="w-full aspect-square object-cover"
                   />
-                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-center items-center gap-2">
+                  <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-center items-center gap-2">
                     <button
                       onClick={() => setEditingPhoto(photo)}
-                      className="bg-white text-black px-3 py-1 rounded text-sm font-bold hover:bg-neutral-300"
+                      className="bg-white text-black px-3 py-1 rounded text-sm font-bold hover:bg-gray-200 flex items-center gap-1"
                     >
                       <Edit size={16} />
+                      Editează
                     </button>
                     <button
                       onClick={() => handleDeletePhoto(photo.id)}
-                      className="bg-red-600 text-white px-3 py-1 rounded text-sm font-bold hover:bg-red-700"
+                      className="bg-red-600 text-white px-3 py-1 rounded text-sm font-bold hover:bg-red-700 flex items-center gap-1"
                     >
                       <Trash2 size={16} />
+                      Șterge
                     </button>
                     <button
                       onClick={() =>
@@ -875,21 +878,21 @@ export default function AdminPage() {
                           return next
                         })
                       }
-                      className={`px-3 py-1 rounded text-sm font-bold ${
+                      className={`px-3 py-1 rounded text-sm font-bold flex items-center gap-1 ${
                         selectedPhotos.has(photo.id)
-                          ? 'bg-neutral-800 text-white'
-                          : 'bg-white text-black'
+                          ? 'bg-white text-black'
+                          : 'bg-black text-white'
                       }`}
                     >
                       {selectedPhotos.has(photo.id) ? <Check size={16} /> : <Plus size={16} />}
                     </button>
                   </div>
                   {photo.featured && (
-                    <div className="absolute top-2 right-2 bg-neutral-800 text-white text-xs px-2 py-1 rounded">
+                    <div className="absolute top-2 right-2 bg-yellow-400 text-black text-xs px-2 py-1 rounded font-bold">
                       Featured
                     </div>
                   )}
-                  <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white text-xs px-2 py-1 truncate">
+                  <div className="absolute bottom-0 left-0 right-0 bg-black/90 text-white text-xs px-2 py-1 truncate font-medium">
                     {photo.category}
                   </div>
                 </div>
@@ -900,35 +903,35 @@ export default function AdminPage() {
 
         {/* Messages Tab */}
         {activeTab === 'messages' && (
-          <div className="bg-neutral-100 rounded-lg">
+          <div className="bg-white rounded-lg">
             {messages.length === 0 ? (
               <p className="text-center py-12 text-black">Nu există mesaje</p>
             ) : (
-              <div className="divide-y divide-neutral-300">
+              <div className="divide-y divide-gray-200">
                 {messages.map((msg) => (
                   <div
                     key={msg.id}
-                    className={`p-6 ${!msg.read ? 'bg-neutral-200' : ''}`}
+                    className={`p-6 ${!msg.read ? 'bg-yellow-50' : ''}`}
                   >
                     <div className="flex justify-between items-start mb-2">
                       <div>
                         <h3 className="font-bold text-black">{msg.name}</h3>
-                        <p className="text-sm text-black">{msg.email}</p>
+                        <p className="text-sm text-gray-600">{msg.email}</p>
                         {msg.phone && (
-                          <p className="text-sm text-black">{msg.phone}</p>
+                          <p className="text-sm text-gray-600">{msg.phone}</p>
                         )}
                       </div>
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleToggleMessageRead(msg.id, msg.read)}
-                          className="p-2 hover:bg-neutral-300 rounded text-black"
+                          className="p-2 hover:bg-gray-100 rounded text-black"
                           title={msg.read ? 'Marchează ca necitit' : 'Marchează ca citit'}
                         >
                           {msg.read ? <EyeOff size={18} /> : <Eye size={18} />}
                         </button>
                         <button
                           onClick={() => handleDeleteMessage(msg.id)}
-                          className="p-2 hover:bg-red-100 text-red-600 rounded"
+                          className="p-2 hover:bg-red-50 text-red-600 rounded"
                         >
                           <Trash2 size={18} />
                         </button>
@@ -938,7 +941,7 @@ export default function AdminPage() {
                       <p className="font-bold text-black mb-2">{msg.subject}</p>
                     )}
                     <p className="text-black">{msg.message}</p>
-                    <p className="text-sm text-black mt-2">
+                    <p className="text-sm text-gray-500 mt-2">
                       {new Date(msg.createdAt).toLocaleString('ro-RO')}
                     </p>
                   </div>
@@ -952,14 +955,14 @@ export default function AdminPage() {
         {activeTab === 'packages' && (
           <div className="space-y-8">
             {/* Pricing Content Section */}
-            <div className="bg-neutral-100 rounded-lg p-6">
+            <div className="bg-white rounded-lg p-6">
               <h2 className="text-xl font-bold text-black mb-4 flex items-center gap-2">
                 <Tag size={20} />
                 Conținut Pagină Pachete
               </h2>
               <div className="grid md:grid-cols-2 gap-4">
                 {pricingContent.map((content) => (
-                  <div key={content.id} className="bg-white rounded-lg p-4 border border-neutral-300">
+                  <div key={content.id} className="bg-gray-50 rounded-lg p-4 border border-gray-300">
                     <label className="block text-sm font-bold mb-2 text-black">
                       {getContentLabel(content.key)}
                     </label>
@@ -973,9 +976,9 @@ export default function AdminPage() {
                           setPricingContent(updated)
                         }}
                         onBlur={() => handleUpdateContent(content)}
-                        className="w-full px-3 py-2 border rounded text-black"
+                        className="w-full px-3 py-2 border border-gray-300 rounded text-black bg-white"
                         rows={3}
-                        placeholder="Separate items with commas"
+                        placeholder="Separate elementele prin virgulă"
                       />
                     ) : (
                       <input
@@ -988,7 +991,7 @@ export default function AdminPage() {
                           setPricingContent(updated)
                         }}
                         onBlur={() => handleUpdateContent(content)}
-                        className="w-full px-3 py-2 border rounded text-black"
+                        className="w-full px-3 py-2 border border-gray-300 rounded text-black bg-white"
                       />
                     )}
                   </div>
@@ -997,14 +1000,14 @@ export default function AdminPage() {
             </div>
 
             {/* Packages Management */}
-            <div className="bg-neutral-100 rounded-lg p-6">
+            <div className="bg-white rounded-lg p-6">
               <h2 className="text-xl font-bold text-black mb-4 flex items-center gap-2">
                 <Layers size={20} />
                 Pachete
               </h2>
 
               {/* Add New Package Form */}
-              <div className="bg-white rounded-lg p-4 mb-6 border border-neutral-300">
+              <div className="bg-gray-50 rounded-lg p-4 mb-6 border border-gray-300">
                 <h3 className="font-bold text-black mb-3">Adaugă Pachet Nou</h3>
                 <div className="grid md:grid-cols-2 gap-4">
                   <div>
@@ -1013,7 +1016,7 @@ export default function AdminPage() {
                       type="text"
                       value={newPackage.name || ''}
                       onChange={(e) => setNewPackage({ ...newPackage, name: e.target.value })}
-                      className="w-full px-3 py-2 border rounded bg-white text-black"
+                      className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-black"
                       placeholder="ex: MINI SESSION"
                     />
                   </div>
@@ -1022,7 +1025,7 @@ export default function AdminPage() {
                     <select
                       value={newPackage.category || ''}
                       onChange={(e) => setNewPackage({ ...newPackage, category: e.target.value })}
-                      className="w-full px-3 py-2 border rounded bg-white text-black"
+                      className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-black"
                     >
                       <option value="sedinteFoto">Ședințe Foto</option>
                       <option value="botezuri">Botezuri</option>
@@ -1036,7 +1039,7 @@ export default function AdminPage() {
                       type="text"
                       value={newPackage.categoryTitle || ''}
                       onChange={(e) => setNewPackage({ ...newPackage, categoryTitle: e.target.value })}
-                      className="w-full px-3 py-2 border rounded bg-white text-black"
+                      className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-black"
                       placeholder="ex: ȘEDINȚE FOTO"
                     />
                   </div>
@@ -1046,7 +1049,7 @@ export default function AdminPage() {
                       type="number"
                       value={newPackage.price || 0}
                       onChange={(e) => setNewPackage({ ...newPackage, price: Number(e.target.value) })}
-                      className="w-full px-3 py-2 border rounded bg-white text-black"
+                      className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-black"
                       min={0}
                       placeholder="ex: 100"
                     />
@@ -1057,7 +1060,7 @@ export default function AdminPage() {
                       type="text"
                       value={newPackage.duration || ''}
                       onChange={(e) => setNewPackage({ ...newPackage, duration: e.target.value })}
-                      className="w-full px-3 py-2 border rounded bg-white text-black"
+                      className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-black"
                       placeholder="ex: 1-2 ore"
                     />
                   </div>
@@ -1067,7 +1070,7 @@ export default function AdminPage() {
                       type="text"
                       value={Array.isArray(newPackage.features) ? newPackage.features.join(', ') : ''}
                       onChange={(e) => setNewPackage({ ...newPackage, features: e.target.value.split(',').filter(f => f.trim()) })}
-                      className="w-full px-3 py-2 border rounded bg-white text-black"
+                      className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-black"
                       placeholder="ex: 10-15 fotografii, Livrare online"
                     />
                   </div>
@@ -1087,7 +1090,7 @@ export default function AdminPage() {
                 <button
                   onClick={handleCreatePackage}
                   disabled={loading || !newPackage.name || !newPackage.category}
-                  className="mt-4 bg-neutral-800 text-white px-6 py-2 rounded font-bold hover:bg-neutral-700 disabled:opacity-50 flex items-center gap-2"
+                  className="mt-4 bg-black text-white px-6 py-2 rounded font-bold hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   <Plus size={18} />
                   {loading ? 'Se adaugă...' : 'Adaugă Pachet'}
@@ -1096,57 +1099,58 @@ export default function AdminPage() {
 
               {/* Existing Packages */}
               <div className="space-y-6">
-                {(['sedinteFoto', 'botezuri', 'nunti', 'evenimente'] as const).map((cat) => {
-                  const catPackages = packages.filter((p) => p.category === cat)
-                  if (catPackages.length === 0) return null
-                  return (
-                    <div key={cat}>
-                      <h3 className="text-lg font-bold text-black mb-3">
-                        {catPackages[0].categoryTitle || cat}
-                      </h3>
-                      <div className="grid md:grid-cols-2 gap-4">
-                        {catPackages.map((pkg) => (
-                          <div
-                            key={pkg.id}
-                            className="bg-white rounded-lg p-4 border border-neutral-300 relative"
-                          >
-                            {pkg.isPopular && (
-                              <span className="absolute top-4 right-4 bg-neutral-800 text-white text-xs px-2 py-1 rounded-full">
-                                Popular
-                              </span>
-                            )}
-                            <h4 className="font-bold text-black">{pkg.name}</h4>
-                            <p className="text-black font-bold text-xl">{pkg.price} €</p>
-                            <p className="text-black/60 text-sm mb-2">{pkg.duration}</p>
-                            <ul className="text-sm text-black mb-3">
-                              {pkg.features.map((f, i) => (
-                                <li key={i}>• {f}</li>
-                              ))}
-                            </ul>
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => setEditingPackage({ ...pkg })}
-                                className="flex items-center gap-1 px-3 py-1 border border-neutral-400 text-black rounded hover:bg-neutral-200 text-sm"
-                              >
-                                <Edit size={14} />
-                                Editează
-                              </button>
-                              <button
-                                onClick={() => handleDeletePackage(pkg.id)}
-                                className="flex items-center gap-1 px-3 py-1 border border-red-400 text-red-600 rounded hover:bg-red-50 text-sm"
-                              >
-                                <Trash2 size={14} />
-                                Șterge
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )
-                })}
-                {packages.length === 0 && (
+                {packages.length === 0 ? (
                   <p className="text-center py-8 text-black">Nu există pachete. Adaugă primul pachet mai sus!</p>
+                ) : (
+                  (['sedinteFoto', 'botezuri', 'nunti', 'evenimente'] as const).map((cat) => {
+                    const catPackages = packages.filter((p) => p.category === cat)
+                    if (catPackages.length === 0) return null
+                    return (
+                      <div key={cat}>
+                        <h3 className="text-lg font-bold text-black mb-3">
+                          {catPackages[0].categoryTitle || cat}
+                        </h3>
+                        <div className="grid md:grid-cols-2 gap-4">
+                          {catPackages.map((pkg) => (
+                            <div
+                              key={pkg.id}
+                              className="bg-gray-50 rounded-lg p-4 border border-gray-300 relative"
+                            >
+                              {pkg.isPopular && (
+                                <span className="absolute top-4 right-4 bg-yellow-400 text-black text-xs px-2 py-1 rounded-full font-bold">
+                                  Popular
+                                </span>
+                              )}
+                              <h4 className="font-bold text-black">{pkg.name}</h4>
+                              <p className="text-black font-bold text-xl">{pkg.price} €</p>
+                              <p className="text-gray-600 text-sm mb-2">{pkg.duration}</p>
+                              <ul className="text-sm text-black mb-3">
+                                {pkg.features.map((f, i) => (
+                                  <li key={i}>• {f}</li>
+                                ))}
+                              </ul>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => setEditingPackage({ ...pkg })}
+                                  className="flex items-center gap-1 px-3 py-1 border border-gray-400 text-black rounded hover:bg-gray-200 text-sm font-medium"
+                                >
+                                  <Edit size={14} />
+                                  Editează
+                                </button>
+                                <button
+                                  onClick={() => handleDeletePackage(pkg.id)}
+                                  className="flex items-center gap-1 px-3 py-1 border border-red-400 text-red-600 rounded hover:bg-red-50 text-sm font-medium"
+                                >
+                                  <Trash2 size={14} />
+                                  Șterge
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })
                 )}
               </div>
             </div>
@@ -1161,21 +1165,21 @@ export default function AdminPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+            className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50"
             onClick={() => setEditingPhoto(null)}
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-neutral-100 rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+              className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold text-black">Editează Poza</h2>
                 <button
                   onClick={() => setEditingPhoto(null)}
-                  className="p-2 hover:bg-neutral-300 rounded text-black"
+                  className="p-2 hover:bg-gray-100 rounded text-black"
                 >
                   <X size={24} />
                 </button>
@@ -1196,7 +1200,7 @@ export default function AdminPage() {
                     onChange={(e) =>
                       setEditingPhoto({ ...editingPhoto, title: e.target.value })
                     }
-                    className="w-full px-3 py-2 border rounded bg-white text-black"
+                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-black"
                   />
                 </div>
 
@@ -1207,7 +1211,7 @@ export default function AdminPage() {
                     onChange={(e) =>
                       setEditingPhoto({ ...editingPhoto, description: e.target.value })
                     }
-                    className="w-full px-3 py-2 border rounded bg-white text-black"
+                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-black"
                     rows={3}
                   />
                 </div>
@@ -1219,7 +1223,7 @@ export default function AdminPage() {
                     onChange={(e) =>
                       setEditingPhoto({ ...editingPhoto, category: e.target.value })
                     }
-                    className="w-full px-3 py-2 border rounded bg-white text-black"
+                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-black mb-2"
                   >
                     {PREDEFINED_CATEGORIES.map(cat => (
                       <option key={cat} value={cat}>{cat}</option>
@@ -1231,7 +1235,7 @@ export default function AdminPage() {
                     onChange={(e) =>
                       setEditingPhoto({ ...editingPhoto, category: e.target.value })
                     }
-                    className="w-full px-3 py-2 border rounded bg-white text-black mt-2"
+                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-black"
                   />
                 </div>
 
@@ -1253,14 +1257,14 @@ export default function AdminPage() {
                 <div className="flex justify-end gap-3 pt-4">
                   <button
                     onClick={() => setEditingPhoto(null)}
-                    className="px-4 py-2 border rounded hover:bg-neutral-300 text-black"
+                    className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 text-black font-medium"
                   >
                     Anulează
                   </button>
                   <button
                     onClick={() => handleUpdatePhoto(editingPhoto)}
                     disabled={loading}
-                    className="px-4 py-2 bg-neutral-800 text-white rounded hover:bg-neutral-700 disabled:opacity-50"
+                    className="px-4 py-2 bg-black text-white rounded hover:bg-gray-800 disabled:opacity-50 font-medium"
                   >
                     Salvează
                   </button>
@@ -1278,14 +1282,14 @@ export default function AdminPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+            className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50"
             onClick={() => setEditingPackage(null)}
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-neutral-100 rounded-lg p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto"
+              className="bg-white rounded-lg p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-between items-center mb-4">
@@ -1294,7 +1298,7 @@ export default function AdminPage() {
                 </h2>
                 <button
                   onClick={() => setEditingPackage(null)}
-                  className="p-2 hover:bg-neutral-300 rounded text-black"
+                  className="p-2 hover:bg-gray-100 rounded text-black"
                 >
                   <X size={24} />
                 </button>
@@ -1309,7 +1313,7 @@ export default function AdminPage() {
                     onChange={(e) =>
                       setEditingPackage({ ...editingPackage, name: e.target.value })
                     }
-                    className="w-full px-3 py-2 border rounded bg-white text-black"
+                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-black"
                   />
                 </div>
 
@@ -1321,7 +1325,7 @@ export default function AdminPage() {
                     onChange={(e) =>
                       setEditingPackage({ ...editingPackage, price: Number(e.target.value) })
                     }
-                    className="w-full px-3 py-2 border rounded bg-white text-black"
+                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-black"
                     min={0}
                   />
                 </div>
@@ -1334,7 +1338,7 @@ export default function AdminPage() {
                     onChange={(e) =>
                       setEditingPackage({ ...editingPackage, duration: e.target.value })
                     }
-                    className="w-full px-3 py-2 border rounded bg-white text-black"
+                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-black"
                   />
                 </div>
 
@@ -1351,7 +1355,7 @@ export default function AdminPage() {
                             newFeatures[idx] = e.target.value
                             setEditingPackage({ ...editingPackage, features: newFeatures })
                           }}
-                          className="flex-1 px-3 py-2 border rounded bg-white text-black text-sm"
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded bg-white text-black text-sm"
                         />
                         <button
                           onClick={() => {
@@ -1371,7 +1375,7 @@ export default function AdminPage() {
                           features: [...editingPackage.features, ''],
                         })
                       }
-                      className="flex items-center gap-2 text-sm text-black hover:underline"
+                      className="flex items-center gap-2 text-sm text-black hover:underline font-medium"
                     >
                       <Plus size={14} />
                       Adaugă linie
@@ -1397,14 +1401,14 @@ export default function AdminPage() {
                 <div className="flex justify-end gap-3 pt-4">
                   <button
                     onClick={() => setEditingPackage(null)}
-                    className="px-4 py-2 border rounded hover:bg-neutral-300 text-black"
+                    className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 text-black font-medium"
                   >
                     Anulează
                   </button>
                   <button
                     onClick={() => handleUpdatePackage(editingPackage)}
                     disabled={loading}
-                    className="px-4 py-2 bg-neutral-800 text-white rounded hover:bg-neutral-700 disabled:opacity-50"
+                    className="px-4 py-2 bg-black text-white rounded hover:bg-gray-800 disabled:opacity-50 font-medium"
                   >
                     {loading ? 'Se salvează...' : 'Salvează'}
                   </button>
@@ -1422,14 +1426,14 @@ export default function AdminPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+            className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50"
             onClick={() => setShowPasswordModal(false)}
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-neutral-100 rounded-lg p-6 max-w-md w-full"
+              className="bg-white rounded-lg p-6 max-w-md w-full"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-between items-center mb-4">
@@ -1441,7 +1445,7 @@ export default function AdminPage() {
                     setPasswordSuccess('')
                     setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
                   }}
-                  className="p-2 hover:bg-neutral-300 rounded text-black"
+                  className="p-2 hover:bg-gray-100 rounded text-black"
                 >
                   <X size={24} />
                 </button>
@@ -1469,7 +1473,7 @@ export default function AdminPage() {
                       setPasswordForm({ ...passwordForm, currentPassword: e.target.value })
                     }
                     required
-                    className="w-full px-3 py-2 border rounded bg-white text-black focus:outline-none focus:border-neutral-400"
+                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-black focus:outline-none focus:border-black"
                   />
                 </div>
 
@@ -1483,7 +1487,7 @@ export default function AdminPage() {
                     }
                     required
                     minLength={6}
-                    className="w-full px-3 py-2 border rounded bg-white text-black focus:outline-none focus:border-neutral-400"
+                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-black focus:outline-none focus:border-black"
                   />
                 </div>
 
@@ -1497,7 +1501,7 @@ export default function AdminPage() {
                     }
                     required
                     minLength={6}
-                    className="w-full px-3 py-2 border rounded bg-white text-black focus:outline-none focus:border-neutral-400"
+                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-black focus:outline-none focus:border-black"
                   />
                 </div>
 
@@ -1510,14 +1514,14 @@ export default function AdminPage() {
                       setPasswordSuccess('')
                       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
                     }}
-                    className="px-4 py-2 border rounded hover:bg-neutral-300 text-black"
+                    className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 text-black font-medium"
                   >
                     Anulează
                   </button>
                   <button
                     type="submit"
                     disabled={loading}
-                    className="px-4 py-2 bg-neutral-800 text-white rounded hover:bg-neutral-700 disabled:opacity-50"
+                    className="px-4 py-2 bg-black text-white rounded hover:bg-gray-800 disabled:opacity-50 font-medium"
                   >
                     {loading ? 'Se schimbă...' : 'Schimbă Parola'}
                   </button>

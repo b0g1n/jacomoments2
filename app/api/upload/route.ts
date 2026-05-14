@@ -1,69 +1,105 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import sharp from 'sharp'
+import { writeFile, mkdir } from 'fs/promises'
+import { join } from 'path'
 
 export const dynamic = 'force-dynamic'
 
-// POST - Add photo by URL (for Vercel deployment)
+// POST - Handle actual file uploads with image optimization
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { url, title, description, category, featured } = body
+    const formData = await request.formData()
+    const file = formData.get('file') as File
+    const category = formData.get('category') as string || 'nunta'
 
-    if (!url) {
-      return NextResponse.json({ error: 'URL is required' }, { status: 400 })
+    if (!file) {
+      return NextResponse.json({ error: 'No file uploaded' }, { status: 400 })
     }
 
-    // Extract filename from URL
-    const filename = url.split('/').pop() || 'photo.jpg'
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      return NextResponse.json({ error: 'Only image files are allowed' }, { status: 400 })
+    }
+
+    // Read file
+    const bytes = await file.arrayBuffer()
+    const buffer = Buffer.from(bytes)
+
+    // Generate filename
+    const timestamp = Date.now()
+    const random = Math.random().toString(36).substring(7)
+    const ext = file.name.split('.').pop()
+    const filename = `${timestamp}-${random}.${ext}`
+
+    // Create category directory if it doesn't exist
+    const publicDir = join(process.cwd(), 'public', 'photos', category)
+    await mkdir(publicDir, { recursive: true })
+
+    // Optimize image based on size
+    let optimizedBuffer: Buffer = buffer
+
+    // Get image metadata
+    const metadata = await sharp(buffer).metadata()
+    const width = metadata.width || 0
+    const height = metadata.height || 0
+
+    // Calculate if we need to resize (max dimension 1920px)
+    const maxDimension = 1920
+    if (width > maxDimension || height > maxDimension) {
+      const image = sharp(buffer)
+      if (width > height) {
+        image.resize(maxDimension, null, {
+          withoutEnlargement: true,
+          fit: 'inside'
+        })
+      } else {
+        image.resize(null, maxDimension, {
+          withoutEnlargement: true,
+          fit: 'inside'
+        })
+      }
+      optimizedBuffer = Buffer.from(await image
+        .jpeg({ quality: 85 }) // Compress to 85% quality
+        .toBuffer())
+    } else {
+      // Just compress if under size limit
+      optimizedBuffer = Buffer.from(await sharp(buffer)
+        .jpeg({ quality: 85 })
+        .toBuffer())
+    }
+
+    // Save optimized image
+    const outputPath = join(publicDir, filename)
+    await writeFile(outputPath, optimizedBuffer)
+
+    // Generate URL path
+    const url = `/photos/${category}/${filename}`
 
     // Create photo in database
     const photo = await prisma.photo.create({
       data: {
         filename,
         url,
-        thumbnail: url, // Using same URL as thumbnail
-        title: title || filename,
-        description: description || '',
-        category: category || 'nunta',
-        featured: featured || false,
+        thumbnail: url,
+        category,
+        title: file.name,
+        featured: false,
       },
     })
 
     return NextResponse.json({
       success: true,
-      photo,
+      filename,
+      url,
+      category,
+      id: photo.id,
     })
   } catch (error) {
-    console.error('Error adding photo:', error)
-    return NextResponse.json({ error: 'Failed to add photo' }, { status: 500 })
+    console.error('Error uploading photo:', error)
+    return NextResponse.json({
+      error: 'Failed to upload photo',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 })
   }
-}
-
-// GET - Get upload instructions
-export async function GET() {
-  return NextResponse.json({
-    message: 'To add photos, upload them to an image hosting service (Imgur, Cloudinary, etc.) and use the POST endpoint with the URL.',
-    usage: {
-      method: 'POST',
-      body: {
-        url: 'string (required) - Image URL from hosting service',
-        title: 'string (optional) - Photo title',
-        description: 'string (optional) - Photo description',
-        category: 'string (optional) - Category (nunta, botez, majorat)',
-        featured: 'boolean (optional) - Show in featured section',
-      },
-      example: {
-        url: 'https://i.imgur.com/abc123.jpg',
-        title: 'Nuntă frumoasă',
-        description: 'Moment special',
-        category: 'nunta',
-        featured: true,
-      }
-    },
-    recommended_services: [
-      'Imgur (https://imgur.com) - Free, no account needed for basic use',
-      'Cloudinary (https://cloudinary.com) - Free tier available',
-      'Postimages (https://postimages.org) - Simple, no registration',
-    ]
-  })
 }
