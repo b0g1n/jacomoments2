@@ -139,7 +139,7 @@ export async function PUT(request: NextRequest) {
     if (categoryTitle !== undefined) updateData.categoryTitle = categoryTitle
     if (price !== undefined) updateData.price = Number(price)
     if (duration !== undefined) updateData.duration = duration
-    if (isPopular !== undefined) update-data.isPopular = Boolean(isPopular)
+    if (isPopular !== undefined) updateData.isPopular = Boolean(isPopular)
     if (order !== undefined) updateData.order = Number(order)
     if (features !== undefined) updateData.features = serializeFeatures(features)
 
