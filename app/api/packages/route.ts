@@ -4,6 +4,23 @@ import { prisma } from '@/lib/prisma'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+// Helper functions
+function parseFeatures(features: string | null): string[] {
+  if (!features) return []
+  try {
+    return JSON.parse(features)
+  } catch {
+    return []
+  }
+}
+
+function serializeFeatures(features: string[] | string): string {
+  if (Array.isArray(features)) {
+    return JSON.stringify(features.filter((f) => f?.trim()))
+  }
+  return features || '[]'
+}
+
 // GET - Fetch all packages
 export async function GET() {
   try {
@@ -122,7 +139,7 @@ export async function PUT(request: NextRequest) {
     if (categoryTitle !== undefined) updateData.categoryTitle = categoryTitle
     if (price !== undefined) updateData.price = Number(price)
     if (duration !== undefined) updateData.duration = duration
-    if (isPopular !== undefined) updateData.isPopular = Boolean(isPopular)
+    if (isPopular !== undefined) update-data.isPopular = Boolean(isPopular)
     if (order !== undefined) updateData.order = Number(order)
     if (features !== undefined) updateData.features = serializeFeatures(features)
 
@@ -166,21 +183,4 @@ export async function DELETE(request: NextRequest) {
       { status: 500 }
     )
   }
-}
-
-// Helper functions
-function parseFeatures(features: string | null): string[] {
-  if (!features) return []
-  try {
-    return JSON.parse(features)
-  } catch {
-    return []
-  }
-}
-
-function serializeFeatures(features: string[] | string): string {
-  if (Array.isArray(features)) {
-    return JSON.stringify(features.filter((f) => f?.trim()))
-  }
-  return features || '[]'
 }

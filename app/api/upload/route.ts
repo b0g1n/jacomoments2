@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { put } from '@vercel/blob'
+import sharp from 'sharp'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -32,7 +33,6 @@ export async function POST(request: NextRequest) {
     // Optimize image with Sharp
     let uploadBuffer = buffer
     try {
-      const sharp = (await import('sharp')).default
       const metadata = await sharp(buffer).metadata()
       const width = metadata.width || 0
       const height = metadata.height || 0
