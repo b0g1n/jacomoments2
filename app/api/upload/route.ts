@@ -45,18 +45,21 @@ export async function POST(request: NextRequest) {
       console.warn('Sharp optimization failed, using original:', sharpError)
     }
 
-    // Upload to Vercel Blob
+    // Upload to Vercel Blob with PRIVATE access
     const blob = await put(filename, uploadBuffer, {
-      access: 'public', // <--- FIX: Changed from 'private' to 'public'
+      access: 'private', // CORRECT: Must be private for this store
       contentType: 'image/jpeg',
     })
+
+    // The URL for the database will now point to our new proxy route
+    const proxyUrl = `/api/images/${blob.pathname}`
 
     // Save to database
     const photo = await prisma.photo.create({
       data: {
-        filename: blob.pathname, // Use pathname for consistency
-        url: blob.url, // Public URL
-        thumbnail: blob.url, // Public URL
+        filename: blob.pathname,
+        url: proxyUrl, // Use the proxy URL
+        thumbnail: proxyUrl, // Use the proxy URL for thumbnail as well
         category,
         title: file.name.replace(/\.[^/.]+$/, ''),
         featured: false,
@@ -68,7 +71,7 @@ export async function POST(request: NextRequest) {
       photo: {
         id: photo.id,
         filename: photo.filename,
-        url: blob.url,
+        url: proxyUrl,
         category: photo.category,
         title: photo.title,
       },
