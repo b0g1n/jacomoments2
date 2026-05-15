@@ -41,7 +41,7 @@ export async function GET(
 
     // Create new headers for the response to the client
     const headers = new Headers()
-    headers.set('Content-Type', blob.contentType || 'image/jpeg')
+    headers.set('Content-Type', response.headers.get('Content-Type') || 'image/jpeg')
     headers.set('Cache-Control', 'public, max-age=31536000, immutable')
 
     // Stream the image content back to the client
