@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+'''import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 export const runtime = 'nodejs'
@@ -26,14 +26,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json([])
     }
 
-    const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'
-    const serverUrl = `${baseUrl}/api/images/photos`
-
-    const photosWithUrls = photos.map(photo => ({
-      ...photo,
-      url: `${serverUrl}/${photo.category}/${photo.filename}`,
-      thumbnail: `${serverUrl}/${photo.category}/${photo.filename}`,
-    }))
+    const photosWithUrls = photos.map(photo => {
+      // Construct the public URL directly
+      const publicUrl = `${process.env.BLOB_URL}/${photo.filename}`;
+      return {
+        ...photo,
+        url: publicUrl,
+      };
+    });
 
     return NextResponse.json(photosWithUrls)
 
@@ -50,13 +50,12 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { filename, url, thumbnail, title, description, category, tags, featured, order } = body
+    const { filename, url, title, description, category, tags, featured, order } = body
 
     const photo = await prisma.photo.create({
       data: {
         filename,
         url,
-        thumbnail: thumbnail || url,
         title,
         description,
         category: category || 'nunta',
@@ -105,3 +104,4 @@ export async function DELETE(request: NextRequest) {
     )
   }
 }
+''
