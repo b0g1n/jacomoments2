@@ -21,21 +21,9 @@ export async function GET(request: NextRequest) {
       orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
     })
 
-    // If no photos, return empty array
-    if (photos.length === 0) {
-      return NextResponse.json([])
-    }
-
-    const photosWithUrls = photos.map(photo => {
-      // Construct the public URL directly
-      const publicUrl = `${process.env.BLOB_URL}/${photo.filename}`;
-      return {
-        ...photo,
-        url: publicUrl,
-      };
-    });
-
-    return NextResponse.json(photosWithUrls)
+    // The 'photos' object from the database already contains the correct, full blob URL.
+    // No need to reconstruct it.
+    return NextResponse.json(photos)
 
   } catch (error) {
     console.error('Error fetching photos:', error)
