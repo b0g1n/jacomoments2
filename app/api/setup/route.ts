@@ -4,14 +4,15 @@ import { PrismaClient } from '@prisma/client'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-// One-time setup endpoint - creates tables and initializes default data
+// One-time setup endpoint - Now temporarily running on GET for easy setup
 // Visit /api/setup after deployment to set up everything
-export async function POST() {
+export async function GET() {
   const prisma = new PrismaClient()
 
   try {
     // Create default admin user if not exists
     const adminCount = await prisma.admin.count()
+    let adminCreated = false
     if (adminCount === 0) {
       await prisma.admin.create({
         data: {
@@ -19,10 +20,12 @@ export async function POST() {
           password: 'admin123', // In production, this should be hashed!
         },
       })
+      adminCreated = true
     }
 
     // Check if categories exist, if not create defaults
     const categoryCount = await prisma.category.count()
+    let categoriesInitialized = false
     if (categoryCount === 0) {
       await prisma.category.createMany({
         data: [
@@ -33,10 +36,12 @@ export async function POST() {
           { id: 'cat-5', name: 'eveniment', order: 4 },
         ],
       })
+      categoriesInitialized = true
     }
 
     // Check if packages exist, if not create defaults
     const packageCount = await prisma.package.count()
+    let packagesInitialized = false
     if (packageCount === 0) {
       await prisma.package.createMany({
         data: [
@@ -134,10 +139,12 @@ export async function POST() {
           },
         ],
       })
+      packagesInitialized = true
     }
 
     // Check if pricing content exists, if not create defaults
     const pricingContentCount = await prisma.pricingContent.count()
+    let pricingContentInitialized = false
     if (pricingContentCount === 0) {
       await prisma.pricingContent.createMany({
         data: [
@@ -149,15 +156,16 @@ export async function POST() {
           { id: 'pc-6', key: 'requestCustom', value: 'CERE OFERTĂ PERSONALIZATĂ' },
         ],
       })
+      pricingContentInitialized = true
     }
 
     return NextResponse.json({
       message: 'Database setup complete!',
       details: {
-        adminCreated: adminCount === 0,
-        categoriesInitialized: categoryCount === 0,
-        packagesInitialized: packageCount === 0,
-        pricingContentInitialized: pricingContentCount === 0,
+        adminCreated,
+        categoriesInitialized,
+        packagesInitialized,
+        pricingContentInitialized,
       },
     })
   } catch (error: any) {
@@ -166,46 +174,6 @@ export async function POST() {
         error: 'Setup failed',
         details: error.message,
         hint: 'Make sure DATABASE_URL is set correctly in Vercel environment variables',
-      },
-      { status: 500 }
-    )
-  } finally {
-    await prisma.$disconnect()
-  }
-}
-
-// GET - Check setup status
-export async function GET() {
-  const prisma = new PrismaClient()
-
-  try {
-    const [adminCount, categoryCount, packageCount, pricingCount] = await Promise.all([
-      prisma.admin.count(),
-      prisma.category.count(),
-      prisma.package.count(),
-      prisma.pricingContent.count(),
-    ])
-
-    return NextResponse.json({
-      setup: {
-        admin: adminCount > 0,
-        categories: categoryCount > 0,
-        packages: packageCount > 0,
-        pricingContent: pricingCount > 0,
-      },
-      counts: {
-        admin: adminCount,
-        categories: categoryCount,
-        packages: packageCount,
-        pricingContent: pricingCount,
-      },
-    })
-  } catch (error: any) {
-    return NextResponse.json(
-      {
-        error: 'Database connection failed',
-        details: error.message,
-        hint: 'Check DATABASE_URL in Vercel environment variables',
       },
       { status: 500 }
     )
