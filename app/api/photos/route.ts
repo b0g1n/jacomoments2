@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { put } from '@vercel/blob'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -28,21 +27,15 @@ export async function GET(request: NextRequest) {
     }
 
     const photosWithUrls = photos.map(photo => {
-      // Construct the public URL directly using the Vercel Blob object
-      const publicUrl = put(photo.filename, ' ', { access: 'public' }).then(res => res.url)
+      // Construct the public URL directly
+      const publicUrl = `${process.env.BLOB_URL}/${photo.filename}`;
       return {
         ...photo,
         url: publicUrl,
       };
     });
-    
-    const resolvedPhotos = await Promise.all(photosWithUrls.map(async (p) => ({
-        ...p,
-        url: await p.url
-    })))
 
-
-    return NextResponse.json(resolvedPhotos)
+    return NextResponse.json(photosWithUrls)
 
   } catch (error) {
     console.error('Error fetching photos:', error)
