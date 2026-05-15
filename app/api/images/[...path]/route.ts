@@ -3,17 +3,20 @@ import { list } from '@vercel/blob'
 
 export const runtime = 'nodejs'
 
-// This is the required signature for the Next.js App Router route handler
+// CORRECTED SIGNATURE
 export async function GET(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ): Promise<Response> {
   try {
+    // Await the params to resolve
+    const { path } = await params;
+    
     // Reconstruct the full path from the dynamic segments
-    const path = params.path.join('/')
+    const fullPath = path.join('/')
 
     // Fetch the blob from Vercel's storage
-    const { blobs } = await list({ prefix: path, limit: 1 })
+    const { blobs } = await list({ prefix: fullPath, limit: 1 })
 
     if (blobs.length === 0) {
       return NextResponse.json({ error: 'Image not found' }, { status: 404 })
