@@ -1,29 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { put } from '@vercel/blob'
+import { prisma } from '@/lib/prisma'
 import sharp from 'sharp'
 
 export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
 
-// POST - Upload photo to Vercel Blob Storage
+// POST - Upload a new photo
 export async function POST(request: NextRequest) {
+  const formData = await request.formData()
+  const file = formData.get('file') as File
+  const category = formData.get('category') as string
+
+  if (!file || !category) {
+    return NextResponse.json({ error: 'File and category are required' }, { status: 400 })
+  }
+
   try {
-    const formData = await request.formData()
-    const file = formData.get('file') as File
-    const category = formData.get('category') as string || 'nunta'
-
-    if (!file) {
-      return NextResponse.json({ error: 'No file uploaded' }, { status: 400 })
-    }
-
-    if (!file.type.startsWith('image/')) {
-      return NextResponse.json({ error: 'Only image files are allowed' }, { status: 400 })
-    }
-
-    // Read file
-    const bytes = await file.arrayBuffer()
-    const buffer = Buffer.from(bytes)
+    const buffer = Buffer.from(await file.arrayBuffer())
 
     // Generate unique filename
     const timestamp = Date.now()
@@ -54,15 +47,16 @@ export async function POST(request: NextRequest) {
 
     // Upload to Vercel Blob
     const blob = await put(filename, uploadBuffer, {
-      access: 'private',
+      access: 'public', // <--- FIX: Changed from 'private' to 'public'
+      contentType: 'image/jpeg',
     })
 
     // Save to database
     const photo = await prisma.photo.create({
       data: {
-        filename: `${timestamp}-${random}.jpg`,
-        url: blob.url,
-        thumbnail: blob.url,
+        filename: blob.pathname, // Use pathname for consistency
+        url: blob.url, // Public URL
+        thumbnail: blob.url, // Public URL
         category,
         title: file.name.replace(/\.[^/.]+$/, ''),
         featured: false,
@@ -81,9 +75,12 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Upload error:', error)
-    return NextResponse.json({
-      error: 'Failed to upload photo',
-      details: error instanceof Error ? error.message : 'Unknown error',
-    }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: 'Failed to upload photo',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      },
+      { status: 500 }
+    )
   }
 }
