@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Playfair_Display, Plus_Jakarta_Sans, Cormorant_Garamond, Cinzel } from 'next/font/google'
 import './globals.css'
 import { LayoutClient } from '@/components/LayoutClient'
+import { Analytics } from '@vercel/analytics/next'
 
 const playfair = Playfair_Display({
   subsets: ['latin'],
@@ -91,6 +92,7 @@ export default function RootLayout({
       </head>
       <body className="font-sans antialiased">
         <LayoutClient>{children}</LayoutClient>
+        <Analytics />
       </body>
     </html>
   )
